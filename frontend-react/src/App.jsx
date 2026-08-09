@@ -1,16 +1,15 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from "react";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
+  const [loggedIn, setLoggedIn] = useState(false);
 
-  return<>
-    <h1 class="text-3xl font-bold underline text-blue-600">
-          Tailwind is Working!
-  </h1>
-  </>
+  return loggedIn ? (
+    <Dashboard />
+  ) : (
+    <Login onLogin={() => setLoggedIn(true)} />
+  );
 }
 
-export default App
+export default App;
