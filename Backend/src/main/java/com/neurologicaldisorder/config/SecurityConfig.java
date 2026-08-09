@@ -1,6 +1,5 @@
-package com.neurologicaldisorder.Config;
+package com.neurologicaldisorder.config;
 
-import com.neurologicaldisorder.Security.CustomUserDetailService;
 import com.neurologicaldisorder.Security.CustomUserDetailService;
 import com.neurologicaldisorder.Security.JwtAuthenticationFilter;
 

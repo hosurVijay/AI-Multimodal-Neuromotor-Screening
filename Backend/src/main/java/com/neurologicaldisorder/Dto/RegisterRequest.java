@@ -1,4 +1,4 @@
-package com.neurologicaldisorder.DTO;
+package com.neurologicaldisorder.Dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

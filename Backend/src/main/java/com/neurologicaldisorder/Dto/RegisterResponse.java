@@ -1,4 +1,4 @@
-package com.neurologicaldisorder.DTO;
+package com.neurologicaldisorder.Dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
