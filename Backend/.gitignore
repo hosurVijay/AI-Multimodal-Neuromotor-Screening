@@ -4,6 +4,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+
+## environment variable##
+.env
+
 ### STS ###
 .apt_generated
 .classpath
@@ -34,3 +38,4 @@ build/
 
 ### springboot ###
 src/main/resources/application.properties
+
