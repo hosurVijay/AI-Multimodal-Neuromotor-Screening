@@ -3,8 +3,8 @@ package com.neurologicaldisorder.Controller;
 import com.neurologicaldisorder.Dto.ForgotPasswordRequest;
 import com.neurologicaldisorder.Dto.LoginRequest;
 import com.neurologicaldisorder.Dto.LoginResponse;
-import com.neurologicaldisorder.DTO.RegisterRequest;
-import com.neurologicaldisorder.DTO.RegisterResponse;
+import com.neurologicaldisorder.Dto.RegisterRequest;
+import com.neurologicaldisorder.Dto.RegisterResponse;
 import com.neurologicaldisorder.Dto.ResetPasswordRequest;
 import com.neurologicaldisorder.Service.AuthService;
 

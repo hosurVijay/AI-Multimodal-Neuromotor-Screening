@@ -2,8 +2,8 @@ package com.neurologicaldisorder.Service;
 
 import com.neurologicaldisorder.Dto.LoginRequest;
 import com.neurologicaldisorder.Dto.LoginResponse;
-import com.neurologicaldisorder.DTO.RegisterRequest;
-import com.neurologicaldisorder.DTO.RegisterResponse;
+import com.neurologicaldisorder.Dto.RegisterRequest;
+import com.neurologicaldisorder.Dto.RegisterResponse;
 import com.neurologicaldisorder.Exception.ResourceAlreadyExistsException;
 import com.neurologicaldisorder.Model.PasswordResetToken;
 import com.neurologicaldisorder.Model.Role;
