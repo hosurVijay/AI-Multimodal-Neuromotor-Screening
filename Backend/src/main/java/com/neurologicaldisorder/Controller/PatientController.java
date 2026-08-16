@@ -1,0 +1,48 @@
+package com.neurologicaldisorder.Controller;
+
+import com.neurologicaldisorder.Dto.PatientResponse;
+import com.neurologicaldisorder.Dto.PatientSummaryResponse;
+import com.neurologicaldisorder.Model.Report;
+import com.neurologicaldisorder.Service.PatientService;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/patients")
+@RequiredArgsConstructor
+public class PatientController {
+
+    private final PatientService patientService;
+
+    @GetMapping
+    public ResponseEntity<List<PatientResponse>> getAllPatients() {
+
+        return ResponseEntity.ok(
+                patientService.getAllPatients()
+        );
+    }
+
+    @GetMapping("/{patientId}")
+    public ResponseEntity<PatientResponse> getPatientById(
+            @PathVariable Integer patientId) {
+
+        return ResponseEntity.ok(
+                patientService.getPatientById(patientId)
+        );
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<List<PatientSummaryResponse>> getAllPatientsSummary() {
+
+        return ResponseEntity.ok(patientService.getAllPatientsSummary());
+    }
+    @GetMapping ("/report/{patientId}")
+    public ResponseEntity<List<Report>> getAllReports(@PathVariable int patientId) {
+        return ResponseEntity.ok(patientService.getAllReports(patientId));
+    }
+}

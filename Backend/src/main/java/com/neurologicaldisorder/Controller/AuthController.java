@@ -1,5 +1,4 @@
 package com.neurologicaldisorder.Controller;
-
 import com.neurologicaldisorder.Dto.ForgotPasswordRequest;
 import com.neurologicaldisorder.Dto.LoginRequest;
 import com.neurologicaldisorder.Dto.LoginResponse;
@@ -7,16 +6,13 @@ import com.neurologicaldisorder.Dto.RegisterRequest;
 import com.neurologicaldisorder.Dto.RegisterResponse;
 import com.neurologicaldisorder.Dto.ResetPasswordRequest;
 import com.neurologicaldisorder.Service.AuthService;
-
 import jakarta.validation.Valid;
-
 import lombok.RequiredArgsConstructor;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-
 import org.springframework.web.bind.annotation.*;
 
+@CrossOrigin
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -24,10 +20,8 @@ public class AuthController {
 
     private final AuthService authService;
 
-
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(
-            @Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login( @Valid @RequestBody LoginRequest request) {
 
         return ResponseEntity.ok(
                 authService.login(request)

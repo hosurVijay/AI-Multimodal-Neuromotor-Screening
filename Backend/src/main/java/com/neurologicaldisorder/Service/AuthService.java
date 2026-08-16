@@ -40,10 +40,6 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
 
 
-    // =========================
-    // LOGIN
-    // =========================
-
     public LoginResponse login(LoginRequest request) {
 
         authenticationManager.authenticate(

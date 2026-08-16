@@ -2,6 +2,7 @@ package com.neurologicaldisorder.Model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,6 +25,7 @@ public class Patient {
     private String fullName;
 
     private String profileImage;
+
 
     private LocalDate dateOfBirth;
 
