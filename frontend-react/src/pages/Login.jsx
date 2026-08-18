@@ -1,18 +1,18 @@
 import { useState } from "react";
 
-function Login({ onLogin }) {
-  const [username, setUsername] = useState("");
+function Login({ onLogin, onForgotPassword }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (username !== "" && password !== "") {
-    onLogin();
-  } else {
-    alert("Please enter username and password");
-  }
-};
+    if (email !== "" && password !== "") {
+      onLogin();
+    } else {
+      alert("Please enter email and password");
+    }
+  };
 
   return (
     <div className="h-screen w-screen overflow-hidden flex font-sans">
@@ -45,17 +45,17 @@ function Login({ onLogin }) {
           {/* Login Form */}
           <form onSubmit={handleLogin}>
 
-            {/* Username */}
+            {/* Email ID */}
             <div className="mb-6">
               <label className="block text-gray-700 font-medium mb-2">
-                Username
+                Email ID
               </label>
 
               <input
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                placeholder="Enter your email ID"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-4 border border-gray-300 rounded-lg
                            outline-none focus:border-cyan-700 focus:ring-2
                            focus:ring-cyan-100 text-gray-700"
@@ -83,6 +83,7 @@ function Login({ onLogin }) {
             <div className="flex justify-end mb-8">
               <button
                 type="button"
+                onClick={onForgotPassword}
                 className="text-cyan-700 font-medium hover:underline"
               >
                 Forgot Password?
