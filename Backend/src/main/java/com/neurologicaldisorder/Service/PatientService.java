@@ -1,27 +1,28 @@
 package com.neurologicaldisorder.Service;
 
+import com.neurologicaldisorder.Dto.PatientReportDetails;
+import com.neurologicaldisorder.Dto.PatientRequest;
 import com.neurologicaldisorder.Dto.PatientResponse;
 import com.neurologicaldisorder.Dto.PatientSummaryResponse;
 import com.neurologicaldisorder.Model.Patient;
-import com.neurologicaldisorder.Model.Report;
+import com.neurologicaldisorder.Model.PatientStatus;
 import com.neurologicaldisorder.Model.User;
 import com.neurologicaldisorder.Repository.PatientRepo;
 
+
+import com.neurologicaldisorder.Repository.UserRepo;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import java.security.Principal;
 
-import org.jspecify.annotations.Nullable;
+
+
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.security.Principal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -29,6 +30,8 @@ import java.util.List;
 public class PatientService {
 
     private final PatientRepo patientRepo;
+
+    private final UserRepo userRepo;
 
     public List<PatientResponse> getAllPatients() {
 
@@ -134,14 +137,75 @@ public class PatientService {
                 .toList();
     }
 
-    public List<Report> getAllReports(int patientId) {
-        Patient patient= patientRepo.findById(patientId)
-                .orElseThrow(
-                        ()->(new EntityNotFoundException("Patient not found with id: " + patientId)));
-        return patient.getReports().stream()
-                .sorted(Comparator.comparing(Report::getReportDate))
-                .toList().reversed();
 
+    public List<PatientReportDetails> getReports(int patientId) {
+
+        Patient patient = patientRepo.findById(patientId)
+                .orElseThrow(() ->
+                        new EntityNotFoundException(
+                                "Patient not found with id: " + patientId
+                        )
+                );
+
+        return patient.getReports()
+                .stream()
+                .map(report -> PatientReportDetails.builder()
+                        .name(patient.getFullName())
+                        .sessionId(report.getSessionId())
+                        .reportDate(report.getReportDate())
+                        .pdfUrl(report.getPdfUrl())
+                        .build())
+                .toList();
     }
 
+    public PatientResponse createPatient(
+            PatientRequest request) {
+
+        Authentication authentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        String email = authentication.getName();
+
+        User admin = userRepo.findByEmail(email)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Logged-in user not found"
+                        )
+                );
+
+        Patient patient = Patient.builder()
+                .fullName(request.getFullName())
+                .profileImage(request.getProfileImage())
+                .dateOfBirth(request.getDateOfBirth())
+                .gender(request.getGender())
+                .phone(request.getPhone())
+                .heightCm(request.getHeightCm())
+                .weightKg(request.getWeightKg())
+                .emergencyContact(request.getEmergencyContact())
+                .city(request.getCity())
+                .state(request.getState())
+                .pincode(request.getPincode())
+
+                .registrationDate(LocalDate.now())
+
+                .status(
+                        request.getStatus() != null
+                                ? request.getStatus()
+                                : PatientStatus.ACTIVE
+                )
+
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+
+                .createdBy(admin)
+
+                .build();
+
+        Patient savedPatient =
+                patientRepo.save(patient);
+
+        return mapToResponse(savedPatient);
+    }
 }

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 
@@ -49,14 +50,19 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**")
                         .permitAll()
 
-                        .requestMatchers("/api/doctor")
-                        .hasAnyRole("ADMIN","DOCTOR")
-
-                        .requestMatchers("/api/admin")
+                        // Only ADMIN can register patients
+                        .requestMatchers(HttpMethod.POST, "/api/patients/register")
                         .hasRole("ADMIN")
 
-                        .requestMatchers("/api/test/protected")
-                        .authenticated()
+                        // Both ADMIN and DOCTOR can view patients
+                        .requestMatchers("/api/patients/**")
+                        .hasAnyRole("ADMIN", "DOCTOR")
+
+                        .requestMatchers("/api/reports/**")
+                        .hasAnyRole("ADMIN", "DOCTOR")
+
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("ADMIN")
 
                         .anyRequest()
                         .authenticated()
