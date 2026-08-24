@@ -1,16 +1,30 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from "react";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import ForgotPassword from "./pages/ForgotPassword";
 
 function App() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
-  return<>
-    <h1 class="text-3xl font-bold underline text-blue-600">
-          Tailwind is Working!
-  </h1>
-  </>
+  if (loggedIn) {
+    return <Dashboard />;
+  }
+
+  if (showForgotPassword) {
+    return (
+      <ForgotPassword
+        onBackToLogin={() => setShowForgotPassword(false)}
+      />
+    );
+  }
+
+  return (
+    <Login
+      onLogin={() => setLoggedIn(true)}
+      onForgotPassword={() => setShowForgotPassword(true)}
+    />
+  );
 }
 
-export default App
+export default App;
