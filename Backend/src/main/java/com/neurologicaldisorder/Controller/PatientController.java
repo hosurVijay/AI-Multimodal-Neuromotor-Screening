@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@CrossOrigin
 @RestController
 @RequestMapping("/api/patients")
 @RequiredArgsConstructor
@@ -48,6 +49,8 @@ public class PatientController {
     public ResponseEntity<List<PatientReportDetails>> getAllReports(@PathVariable int patientId) {
         return ResponseEntity.ok(patientService.getReports(patientId));
     }
+
+
 
     @PostMapping("/register")
     public ResponseEntity<PatientResponse> createPatient(
