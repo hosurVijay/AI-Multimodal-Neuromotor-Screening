@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
-@Setter
 public class PatientReportDetails {
 
     private String  name;
