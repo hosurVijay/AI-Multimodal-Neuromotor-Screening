@@ -1,9 +1,9 @@
 package com.neurologicaldisorder.Dto;
 
 import com.neurologicaldisorder.Model.Gender;
+import com.neurologicaldisorder.Model.Patient;
 import com.neurologicaldisorder.Model.PatientStatus;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,6 +11,9 @@ import java.time.LocalDateTime;
 
 @Getter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Setter
 public class PatientResponse {
 
     private Integer patientId;
@@ -50,4 +53,23 @@ public class PatientResponse {
     private String createdByUsername;
 
     private int age;
+
+    public static PatientResponse from(Patient patient) {
+        return PatientResponse.builder()
+                .patientId(patient.getPatientId())
+                .fullName(patient.getFullName())
+                .profileImage(patient.getProfileImage())
+                .dateOfBirth(patient.getDateOfBirth())
+                .gender(patient.getGender())
+                .phone(patient.getPhone())
+                .heightCm(patient.getHeightCm())
+                .weightKg(patient.getWeightKg())
+                .emergencyContact(patient.getEmergencyContact())
+                .city(patient.getCity())
+                .state(patient.getState())
+                .pincode(patient.getPincode())
+                .registrationDate(patient.getRegistrationDate())
+                .status(patient.getStatus())
+                .build();
+    }
 }

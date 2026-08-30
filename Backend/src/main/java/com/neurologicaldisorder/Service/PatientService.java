@@ -1,9 +1,7 @@
 package com.neurologicaldisorder.Service;
 
-import com.neurologicaldisorder.Dto.PatientReportDetails;
-import com.neurologicaldisorder.Dto.PatientRequest;
-import com.neurologicaldisorder.Dto.PatientResponse;
-import com.neurologicaldisorder.Dto.PatientSummaryResponse;
+import com.neurologicaldisorder.Dto.*;
+import com.neurologicaldisorder.Model.MedicalHistory;
 import com.neurologicaldisorder.Model.Patient;
 import com.neurologicaldisorder.Model.PatientStatus;
 import com.neurologicaldisorder.Model.User;
@@ -19,7 +17,10 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -30,6 +31,8 @@ import java.util.List;
 public class PatientService {
 
     private final PatientRepo patientRepo;
+
+    private final CloudinaryService cloudinaryService;
 
     private final UserRepo userRepo;
 
@@ -158,26 +161,20 @@ public class PatientService {
                 .toList();
     }
 
-    public PatientResponse createPatient(
-            PatientRequest request) {
+    public Patient createPatient(
+            PatientRegistrationRequest request,
+            MultipartFile profileImage
+    ) throws IOException {
 
-        Authentication authentication =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
+        String imageUrl = null;
 
-        String email = authentication.getName();
-
-        User admin = userRepo.findByEmail(email)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Logged-in user not found"
-                        )
-                );
+        if (profileImage != null && !profileImage.isEmpty()) {
+            imageUrl = cloudinaryService.uploadImage(profileImage);
+        }
 
         Patient patient = Patient.builder()
                 .fullName(request.getFullName())
-                .profileImage(request.getProfileImage())
+                .profileImage(imageUrl)
                 .dateOfBirth(request.getDateOfBirth())
                 .gender(request.getGender())
                 .phone(request.getPhone())
@@ -187,26 +184,47 @@ public class PatientService {
                 .city(request.getCity())
                 .state(request.getState())
                 .pincode(request.getPincode())
-
                 .registrationDate(LocalDate.now())
-
-                .status(
-                        request.getStatus() != null
-                                ? request.getStatus()
-                                : PatientStatus.ACTIVE
-                )
-
+                .status(PatientStatus.ACTIVE)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
-
-                .createdBy(admin)
-
                 .build();
 
-        Patient savedPatient =
-                patientRepo.save(patient);
+        return patient;
+    }
 
-        return mapToResponse(savedPatient);
+    @Transactional
+    public void registerPatient(
+            PatientRegistrationRequest request,
+            MultipartFile profileImage
+    ) throws IOException {
+
+        Patient patient = createPatient(
+                request,
+                profileImage
+        );
+
+        MedicalHistory medicalHistory = MedicalHistory.builder()
+                .patient(patient)
+                .neurologicalDisorder(
+                        request.getNeurologicalDisorder())
+                .strokeHistory(
+                        request.getStrokeHistory())
+                .headInjury(
+                        request.getHeadInjury())
+                .brainInjury(
+                        request.getBrainInjury())
+                .diabetes(
+                        request.getDiabetes())
+                .hypertension(
+                        request.getHypertension())
+                .medications(
+                        request.getMedications())
+                .build();
+
+        patient.setMedicalHistory(medicalHistory);
+
+        patientRepo.save(patient);
     }
 
 
