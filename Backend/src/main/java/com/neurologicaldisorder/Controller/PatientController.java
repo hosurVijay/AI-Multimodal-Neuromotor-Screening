@@ -51,7 +51,8 @@ public class PatientController {
     }
 
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE )
+    @RequestMapping("/register")
     public ResponseEntity<String> registerPatient(
 
             @Valid @RequestPart("patient")
