@@ -58,3 +58,4 @@ tf_gpu/
 # ==========================
 .DS_Store
 Thumbs.db
+notebooks/
