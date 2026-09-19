@@ -1,23 +1,38 @@
 import { useState } from "react";
+import { forgotPassword as apiForgotPassword } from "../services/api";
 
 function ForgotPassword({ onBackToLogin }) {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
 
     if (email.trim() === "") {
-      alert("Please enter your email ID");
+      setError("Please enter your email ID");
       return;
     }
 
-    alert("Password reset link will be sent to your email.");
+    setLoading(true);
+
+    try {
+      // POST /api/auth/forgot-password
+      await apiForgotPassword(email);
+      setSent(true);
+    } catch (err) {
+      setError(err.message || "Failed to send reset link. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="h-screen w-screen bg-cyan-950 flex items-center justify-center font-sans">
+    <div style={{ height: '100vh', width: '100%', background: '#083344', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', sans-serif" }}>
 
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-10">
+      <div className="bg-white w-full rounded-2xl shadow-xl" style={{ maxWidth: '448px', padding: '40px' }}>
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-10">
@@ -38,39 +53,54 @@ function ForgotPassword({ onBackToLogin }) {
         </h2>
 
         <p className="text-gray-500 text-center mb-8">
-          Enter your registered email ID to reset your password.
+          {sent
+            ? "A password reset link has been sent to your email."
+            : "Enter your registered email ID to reset your password."}
         </p>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit}>
-
-          <div className="mb-6">
-            <label className="block text-gray-700 font-medium mb-2">
-              Email ID
-            </label>
-
-            <input
-              type="email"
-              placeholder="Enter your email ID"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-4 border border-gray-300 rounded-lg
-                         outline-none focus:border-cyan-700
-                         focus:ring-2 focus:ring-cyan-100
-                         text-gray-700"
-            />
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">
+            {error}
           </div>
+        )}
 
-          <button
-            type="submit"
-            className="w-full py-4 rounded-lg bg-cyan-800
-                       text-white text-lg font-medium
-                       hover:bg-cyan-900 transition duration-200"
-          >
-            SEND RESET LINK
-          </button>
+        {!sent && (
+          <>
+            {/* Form */}
+            <form onSubmit={handleSubmit}>
 
-        </form>
+              <div className="mb-6">
+                <label className="block text-gray-700 font-medium mb-2">
+                  Email ID
+                </label>
+
+                <input
+                  type="email"
+                  placeholder="Enter your email ID"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-4 border border-gray-300 rounded-lg
+                             outline-none focus:border-cyan-700
+                             focus:ring-2 focus:ring-cyan-100
+                             text-gray-700"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 rounded-lg bg-cyan-800
+                           text-white text-lg font-medium
+                           hover:bg-cyan-900 transition duration-200
+                           disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? "SENDING..." : "SEND RESET LINK"}
+              </button>
+
+            </form>
+          </>
+        )}
 
         {/* Back to Login */}
         <button

@@ -1,26 +1,38 @@
 import { useState } from "react";
 
-function Login({ onLogin, onForgotPassword }) {
+function Login({ onLogin, onForgotPassword, sessionExpiredNotice }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
 
-    if (email !== "" && password !== "") {
-      onLogin();
-    } else {
-      alert("Please enter email and password");
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter email and password");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await onLogin({ email, password });
+    } catch (err) {
+      setError(err.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex font-sans">
+    <div style={{ height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', fontFamily: "'Inter', sans-serif" }}>
 
       {/* ================= LEFT SIDE ================= */}
-      <div className="w-1/2 h-full bg-white flex items-center justify-center px-16">
+      <div style={{ width: '50%', height: '100%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 64px' }}>
 
-        <div className="w-full max-w-md">
+        <div style={{ width: '100%', maxWidth: '448px' }}>
 
           {/* Logo */}
           <div className="flex items-center gap-3 mb-14">
@@ -41,6 +53,21 @@ function Login({ onLogin, onForgotPassword }) {
           <p className="text-gray-500 text-lg mb-10">
             Login to access your dashboard and continue managing assessments.
           </p>
+
+          {/* Session Expired Notice */}
+          {sessionExpiredNotice && !error && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-200 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{sessionExpiredNotice}</span>
+            </div>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">
+              {error}
+            </div>
+          )}
 
           {/* Login Form */}
           <form onSubmit={handleLogin}>
@@ -93,11 +120,13 @@ function Login({ onLogin, onForgotPassword }) {
             {/* Login Button */}
             <button
               type="submit"
+              disabled={loading}
               className="w-full py-4 rounded-lg bg-cyan-800
                          text-white text-lg font-medium
-                         hover:bg-cyan-900 transition duration-200"
+                         hover:bg-cyan-900 transition duration-200
+                         disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              LOGIN
+              {loading ? "LOGGING IN..." : "LOGIN"}
             </button>
 
           </form>
@@ -107,9 +136,9 @@ function Login({ onLogin, onForgotPassword }) {
 
 
       {/* ================= RIGHT SIDE ================= */}
-      <div className="w-1/2 h-full bg-cyan-950 text-white px-14 flex items-center">
+      <div style={{ width: '50%', height: '100%', background: '#083344', color: 'white', padding: '0 56px', display: 'flex', alignItems: 'center' }}>
 
-        <div className="max-w-xl">
+        <div style={{ maxWidth: '576px' }}>
 
           {/* Title */}
           <h2 className="text-5xl font-bold leading-tight mb-6">

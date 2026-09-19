@@ -1,306 +1,372 @@
+import { useState, useEffect } from "react";
+import { getPatientReports } from "../services/api";
+
 function PatientDetails({ patient, onBack }) {
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [showFullImage, setShowFullImage] = useState(false);
+
+  const patientId = patient?.patientId || patient?.id;
+
+  useEffect(() => {
+    if (patientId) {
+      fetchReports(patientId);
+    }
+  }, [patientId]);
+
+  const fetchReports = async (id) => {
+    setLoadingReports(true);
+    try {
+      const data = await getPatientReports(id);
+      setReports(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Could not load reports:", err.message);
+      setReports([]);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
   if (!patient) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <p className="text-gray-600">Patient not found.</p>
+      <div className="placeholder-page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+        </svg>
+        <h3>Patient not found</h3>
+        <p>The requested patient information is not available.</p>
+        <button
+          onClick={onBack}
+          style={{
+            marginTop: "16px",
+            padding: "8px 16px",
+            background: "#0e7490",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+          }}
+        >
+          ← Back to Patients
+        </button>
       </div>
     );
   }
 
+  // Derive display values — all come from API data
+  const fullName = patient.fullName || patient.name || "—";
+  const gender = patient.gender || "Not available";
+  const dateOfBirth = patient.dateOfBirth || "Not available";
+  const age = patient.age ? `${patient.age} years` : "Not available";
+  const phone = patient.phone || "Not available";
+  const email = patient.email || "Not available";
+  const emergencyContact = patient.emergencyContact || "Not available";
+  const height = patient.heightCm ? `${patient.heightCm} cm` : (patient.height || "Not available");
+  const weight = patient.weightKg ? `${patient.weightKg} kg` : (patient.weight || "Not available");
+  const city = patient.city || patient.place || "Not available";
+  const state = patient.state || "Not available";
+  const pincode = patient.pincode || "Not available";
+  const registrationDate = patient.registrationDate || "Not available";
+  const status = patient.status || "Active";
+  const initial = fullName !== "—" ? fullName.charAt(0).toUpperCase() : "?";
+  const profileImage = patient.profileImage;
+
   return (
-    <div className="min-h-screen bg-slate-100 font-sans">
-
-      {/* ================= HEADER ================= */}
-      <div className="bg-white border-b border-gray-200 px-8 py-5">
-
-        <div className="flex items-center justify-between">
-
-          <div className="flex items-center gap-3">
-
-            <div className="w-11 h-11 rounded-xl bg-cyan-700 flex items-center justify-center">
-              <span className="text-xl font-bold text-white">
-                N
-              </span>
-            </div>
-
-            <div>
-              <h1 className="text-xl font-semibold text-cyan-800">
-                NeuroCare
-              </h1>
-
-              <p className="text-sm text-gray-500">
-                Neuromotor Screening System
-              </p>
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-      {/* ================= MAIN CONTENT ================= */}
-      <div className="px-8 py-8">
-
-        {/* Back button */}
-        <button
-          onClick={onBack}
-          className="text-cyan-700 font-medium hover:underline mb-6"
-        >
-          ← Back to Patient Summary
-        </button>
-
-
-        {/* Heading */}
-        <div className="mb-6">
-
-          <h2 className="text-3xl font-semibold text-gray-800">
-            Patient Details
+    <div>
+      {/* Header bar with Back button */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+        <div>
+          <button
+            onClick={onBack}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#0e7490",
+              fontWeight: 600,
+              fontSize: "14px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              marginBottom: "8px",
+              padding: 0,
+            }}
+          >
+            ← Back to Patients
+          </button>
+          <h2 style={{ fontSize: "24px", fontWeight: 700, color: "#1e293b", margin: 0 }}>
+            Patient Profile
           </h2>
-
-          <p className="text-gray-500 mt-1">
-            Detailed information about the selected patient.
+          <p className="patient-detail-subtitle" style={{ margin: "4px 0 0" }}>
+            Detailed information and screening history for {fullName}.
           </p>
-
         </div>
-
-
-        {/* ================= PATIENT INFORMATION ================= */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-
-          {/* Patient header */}
-          <div className="px-6 py-6 border-b border-gray-200 flex items-center gap-5">
-
-            <div className="w-20 h-20 rounded-full bg-cyan-100 flex items-center justify-center">
-              <span className="text-3xl font-semibold text-cyan-800">
-                {patient.name.charAt(0)}
-              </span>
-            </div>
-
-            <div>
-              <h3 className="text-2xl font-semibold text-gray-800">
-                {patient.name}
-              </h3>
-
-              <p className="text-gray-500 mt-1">
-                Patient ID: {patient.id}
-              </p>
-            </div>
-
-          </div>
-
-
-          {/* Details */}
-          <div className="p-6">
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
-
-              {/* Patient ID */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Patient ID
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.id}
-                </p>
-              </div>
-
-
-              {/* Full Name */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Full Name
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.name}
-                </p>
-              </div>
-
-
-              {/* Gender */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Gender
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.gender || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Date of Birth */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Date of Birth
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.dateOfBirth || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Age */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Age
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.age || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Phone */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Phone
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.phone || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Email */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Email
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.email || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Emergency Contact */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Emergency Contact
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.emergencyContact || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Address */}
-              <div className="md:col-span-2">
-                <p className="text-sm text-gray-500 mb-1">
-                  Address
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.address || "Not available"}
-                </p>
-              </div>
-
-
-              {/* City */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  City
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.city || patient.place || "Not available"}
-                </p>
-              </div>
-
-
-              {/* State */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  State
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.state || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Pincode */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Pincode
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.pincode || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Height */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Height
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.height || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Weight */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Weight
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.weight || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Registration Date */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Registration Date
-                </p>
-
-                <p className="font-medium text-gray-800">
-                  {patient.registrationDate || "Not available"}
-                </p>
-              </div>
-
-
-              {/* Status */}
-              <div>
-                <p className="text-sm text-gray-500 mb-1">
-                  Status
-                </p>
-
-                <span
-                  className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                    patient.status === "Active"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  {patient.status}
-                </span>
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
       </div>
 
+      {/* Patient card */}
+      <div className="patient-detail-card">
+        {/* Header with avatar */}
+        <div className="patient-detail-header" style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          {profileImage && !imageError ? (
+            <div style={{ position: "relative" }}>
+              <img
+                src={profileImage}
+                alt={fullName}
+                onError={() => setImageError(true)}
+                onClick={() => setShowFullImage(true)}
+                title="Click to expand photo"
+                style={{
+                  width: "72px",
+                  height: "72px",
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  border: "3px solid #0e7490",
+                  boxShadow: "0 2px 8px rgba(14, 116, 144, 0.2)",
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+                onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              />
+            </div>
+          ) : (
+            <div className="patient-avatar" style={{ width: "72px", height: "72px", fontSize: "28px" }}>
+              {initial}
+            </div>
+          )}
+          <div className="patient-header-info">
+            <h3 style={{ fontSize: "22px", margin: "0 0 4px" }}>{fullName}</h3>
+            <p style={{ margin: "0 0 8px", color: "#64748b" }}>Patient ID: {patientId || "—"}</p>
+            <span
+              className={`active-badge ${
+                String(status).toUpperCase() === "ACTIVE" ? "" : "inactive"
+              }`}
+            >
+              {String(status).toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        {/* Detail grid */}
+        <div className="patient-detail-grid">
+          <div>
+            <div className="patient-field-label">Patient ID</div>
+            <div className="patient-field-value">{patientId || "—"}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Full Name</div>
+            <div className="patient-field-value">{fullName}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Gender</div>
+            <div className="patient-field-value">{gender}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Date of Birth</div>
+            <div className="patient-field-value">{dateOfBirth}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Age</div>
+            <div className="patient-field-value">{age}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Phone</div>
+            <div className="patient-field-value">{phone}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Email</div>
+            <div className="patient-field-value">{email}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Emergency Contact</div>
+            <div className="patient-field-value">{emergencyContact}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Height</div>
+            <div className="patient-field-value">{height}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Weight</div>
+            <div className="patient-field-value">{weight}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">City</div>
+            <div className="patient-field-value">{city}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">State</div>
+            <div className="patient-field-value">{state}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Pincode</div>
+            <div className="patient-field-value">{pincode}</div>
+          </div>
+
+          <div>
+            <div className="patient-field-label">Registration Date</div>
+            <div className="patient-field-value">{registrationDate}</div>
+          </div>
+
+          {/* Profile Photo in grid */}
+          <div>
+            <div className="patient-field-label">Profile Photo</div>
+            <div className="patient-field-value">
+              {profileImage && !imageError ? (
+                <button
+                  type="button"
+                  onClick={() => setShowFullImage(true)}
+                  style={{
+                    background: "#ecfeff",
+                    border: "1px solid #a5f3fc",
+                    color: "#0e7490",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  📷 View Photo
+                </button>
+              ) : (
+                <span style={{ color: "#94a3b8" }}>No photo uploaded</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Reports Section */}
+      <div className="data-table-container" style={{ marginTop: "24px" }}>
+        <div className="data-table-header">
+          <h3>Assessment Reports ({reports.length})</h3>
+        </div>
+
+        {loadingReports ? (
+          <div style={{ padding: "24px", textAlign: "center", color: "#64748b" }}>
+            Loading reports...
+          </div>
+        ) : reports.length > 0 ? (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Report Name</th>
+                <th>Session ID</th>
+                <th>Report Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reports.map((report, idx) => (
+                <tr key={idx}>
+                  <td style={{ fontWeight: 600, color: "#1e293b" }}>{report.name || "Neuromotor Assessment"}</td>
+                  <td>#{report.sessionId || "—"}</td>
+                  <td>{report.reportDate ? new Date(report.reportDate).toLocaleDateString() : "—"}</td>
+                  <td>
+                    {report.pdfUrl ? (
+                      <a
+                        href={report.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: "#0e7490",
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          fontSize: "13px",
+                        }}
+                      >
+                        Download PDF ↗
+                      </a>
+                    ) : (
+                      <span style={{ color: "#94a3b8" }}>No PDF</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>
+            No assessment reports available for this patient yet.
+          </div>
+        )}
+      </div>
+
+      {/* Full Size Image Modal */}
+      {showFullImage && profileImage && (
+        <div
+          onClick={() => setShowFullImage(false)}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white",
+              padding: "16px",
+              borderRadius: "16px",
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              textAlign: "center",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <h4 style={{ margin: 0, fontSize: "16px", color: "#1e293b" }}>{fullName} — Profile Photo</h4>
+              <button
+                onClick={() => setShowFullImage(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  color: "#64748b",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={profileImage}
+              alt={fullName}
+              style={{
+                maxWidth: "100%",
+                maxHeight: "75vh",
+                borderRadius: "12px",
+                objectFit: "contain",
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
