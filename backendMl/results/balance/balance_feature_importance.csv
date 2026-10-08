@@ -1,0 +1,11 @@
+feature,importance
+R_Wrist_Gyr_X_mean_median,0.17213379
+R_Wrist_Gyr_Z_zero_crossing_rate_median,0.14457686
+Acc_Magnitude_mean_median,0.114822246
+Acc_Magnitude_std_min,0.10174827
+R_Wrist_Acc_Y_range_min,0.08772245
+Acc_Magnitude_mean_min,0.08609546
+R_Wrist_Acc_Z_rms_max,0.07836315
+R_Wrist_Acc_Z_mean_max,0.0770328
+R_Wrist_Acc_Y_mean_abs_change_min,0.068981014
+R_Wrist_Acc_Y_rms_min,0.068524
