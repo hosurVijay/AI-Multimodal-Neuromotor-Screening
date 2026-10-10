@@ -1,0 +1,38 @@
+{
+    "model": "LogisticRegression",
+    "feature_names": [
+        "mdvp_fo_hz_",
+        "mdvp_fhi_hz_",
+        "mdvp_flo_hz_",
+        "mdvp_jitter___",
+        "mdvp_jitter_abs_",
+        "mdvp_rap",
+        "mdvp_ppq",
+        "jitter_ddp",
+        "mdvp_shimmer",
+        "mdvp_shimmer_db_",
+        "shimmer_apq3",
+        "shimmer_apq5",
+        "mdvp_apq",
+        "shimmer_dda",
+        "nhr",
+        "hnr"
+    ],
+    "label_mapping": {
+        "0": "Healthy",
+        "1": "Parkinson's"
+    },
+    "dataset_size": 81,
+    "train_size": 64,
+    "test_size": 17,
+    "best_parameters": {
+        "classifier__C": 100.0
+    },
+    "cv_balanced_accuracy": 0.6261904761904762,
+    "test_accuracy": 0.7647058823529411,
+    "test_balanced_accuracy": 0.75,
+    "test_roc_auc": 0.7777777777777778,
+    "random_state": 42,
+    "test_size_fraction": 0.2,
+    "warning": "Experimental voice-screening baseline; not clinically validated."
+}
