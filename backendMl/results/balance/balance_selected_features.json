@@ -1,0 +1,12 @@
+[
+    "R_Wrist_Gyr_X_mean_median",
+    "Acc_Magnitude_mean_min",
+    "R_Wrist_Acc_Z_mean_max",
+    "R_Wrist_Acc_Y_range_min",
+    "R_Wrist_Gyr_Z_zero_crossing_rate_median",
+    "Acc_Magnitude_mean_median",
+    "R_Wrist_Acc_Y_mean_abs_change_min",
+    "R_Wrist_Acc_Z_rms_max",
+    "R_Wrist_Acc_Y_rms_min",
+    "Acc_Magnitude_std_min"
+]
