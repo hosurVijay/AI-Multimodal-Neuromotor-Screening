@@ -1,11 +1,14 @@
+
 # backendMl/main.py
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, Form
+from typing import Any
 import pandas as pd
 import numpy as np
 import joblib
 import tempfile
 from pathlib import Path
+import json
 
 
 # ============================================================
@@ -13,19 +16,23 @@ from pathlib import Path
 # ============================================================
 
 from backendMl.preprocessing.balance_preprocessing import (
-    process_file as process_balance_file
+    create_windows as create_balance_windows,
+    extract_features as extract_balance_features,
+    balance_features,
 )
 
 from backendMl.preprocessing.fingerTapping_preprocessing import (
-    process_file as process_finger_file
+    create_windows as create_finger_windows,
+    extract_features as extract_finger_features,
+    gyro_features,
 )
 
 from backendMl.preprocessing.gait_preprocessing import (
-    extract_gait_features_v2
+    extract_gait_features_v2,
 )
 
 from backendMl.preprocessing.voice_feature_extraction import (
-    extract_voice_features
+    extract_voice_features,
 )
 
 
@@ -65,12 +72,12 @@ voice_model = joblib.load(
 app = FastAPI(
     title="Neuromotor Screening API",
     description="FastAPI backend for neuromotor screening modalities.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
 # ============================================================
-# GENERAL HELPER FUNCTIONS
+# GENERAL MODEL HELPERS
 # ============================================================
 
 def get_actual_model(model):
@@ -93,7 +100,6 @@ def get_feature_columns(model):
     or from sklearn's feature_names_in_.
     """
 
-    # If the saved object is a dictionary
     if isinstance(model, dict):
 
         feature_columns = model.get("feature_columns")
@@ -106,7 +112,6 @@ def get_feature_columns(model):
         if feature_names is not None:
             return list(feature_names)
 
-    # If it is an sklearn model/pipeline
     actual_model = get_actual_model(model)
 
     if hasattr(actual_model, "feature_names_in_"):
@@ -118,7 +123,7 @@ def get_feature_columns(model):
 def prepare_features(
     data,
     model,
-    modality_name
+    modality_name,
 ):
     """
     Prepare a DataFrame so that only the features used during
@@ -130,11 +135,9 @@ def prepare_features(
             f"No {modality_name} features were generated."
         )
 
-    # Convert dictionary to DataFrame if necessary
     if isinstance(data, dict):
         data = pd.DataFrame([data])
 
-    # Convert numpy array to DataFrame
     elif isinstance(data, np.ndarray):
 
         if data.ndim == 1:
@@ -142,7 +145,6 @@ def prepare_features(
 
         data = pd.DataFrame(data)
 
-    # Make sure we have a DataFrame
     elif not isinstance(data, pd.DataFrame):
         data = pd.DataFrame(data)
 
@@ -153,12 +155,6 @@ def prepare_features(
 
     feature_columns = get_feature_columns(model)
 
-    # --------------------------------------------------------
-    # IMPORTANT:
-    # If the model tells us the exact training columns,
-    # use ONLY those columns and in EXACTLY that order.
-    # --------------------------------------------------------
-
     if feature_columns is not None:
 
         missing_features = [
@@ -168,7 +164,6 @@ def prepare_features(
         ]
 
         if missing_features:
-
             raise ValueError(
                 f"Missing {modality_name} features: "
                 + ", ".join(missing_features)
@@ -190,7 +185,7 @@ def get_threshold(model, default=0.5):
         for key in [
             "recording_threshold",
             "threshold",
-            "saved_threshold"
+            "saved_threshold",
         ]:
 
             if key in model:
@@ -210,8 +205,133 @@ def prediction_to_int(prediction):
 
     try:
         return int(prediction)
+
     except Exception:
-        return int(np.asarray(prediction).item())
+        return int(
+            np.asarray(prediction).item()
+        )
+
+
+# ============================================================
+# JSON HELPERS
+# ============================================================
+
+def get_modality_data(
+    payload: dict,
+    modality_name: str,
+):
+    """
+    Accept either:
+
+    1. Full report JSON:
+       {
+           "reportId": ...,
+           "patientId": ...,
+           "modalities": {
+               "balance": {...}
+           }
+       }
+
+    OR
+
+    2. Direct modality JSON:
+       {
+           "samplingRateHz": 100,
+           "sampleCount": 500,
+           "signals": {...}
+       }
+    """
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "Request body must be a JSON object."
+        )
+
+    modalities = payload.get("modalities")
+
+    if isinstance(modalities, dict):
+
+        modality = modalities.get(modality_name)
+
+        if modality is None:
+            raise ValueError(
+                f"Missing '{modality_name}' inside 'modalities'."
+            )
+
+        if not isinstance(modality, dict):
+            raise ValueError(
+                f"'{modality_name}' must be a JSON object."
+            )
+
+        return modality
+
+    if modality_name in payload:
+        modality = payload[modality_name]
+
+        if not isinstance(modality, dict):
+            raise ValueError(
+                f"'{modality_name}' must be a JSON object."
+            )
+
+        return modality
+
+    return payload
+
+
+def validate_signal_lengths(
+    signals: dict,
+    required_columns: list,
+):
+    """
+    Make sure all required signal arrays exist and have
+    the same number of samples.
+    """
+
+    missing = [
+        column
+        for column in required_columns
+        if column not in signals
+    ]
+
+    if missing:
+        raise ValueError(
+            "Missing signal fields: "
+            + ", ".join(missing)
+        )
+
+    lengths = {}
+
+    for column in required_columns:
+
+        values = signals[column]
+
+        if not isinstance(values, list):
+            raise ValueError(
+                f"'{column}' must be an array."
+            )
+
+        lengths[column] = len(values)
+
+    unique_lengths = set(
+        lengths.values()
+    )
+
+    if len(unique_lengths) != 1:
+        raise ValueError(
+            "All signal arrays must contain the same "
+            "number of samples."
+        )
+
+    sample_count = next(
+        iter(unique_lengths)
+    )
+
+    if sample_count == 0:
+        raise ValueError(
+            "Signal arrays cannot be empty."
+        )
+
+    return sample_count
 
 
 # ============================================================
@@ -235,101 +355,135 @@ def health():
 
 
 # ============================================================
-# BALANCE PREDICTION
+# BALANCE JSON PREDICTION
 # ============================================================
 
 @app.post("/predict/balance")
 async def predict_balance(
-    file: UploadFile = File(...)
+    payload: dict = Body(...)
 ):
-
-    if not file.filename.lower().endswith(".csv"):
-
-        raise HTTPException(
-            status_code=400,
-            detail="Balance file must be a CSV file."
-        )
-
-    temp_path = None
 
     try:
 
-        # ----------------------------------------------------
-        # Save uploaded file temporarily
-        # ----------------------------------------------------
+        balance_data = get_modality_data(
+            payload,
+            "balance",
+        )
 
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".csv"
-        ) as temp_file:
+        signals = balance_data.get(
+            "signals"
+        )
 
-            content = await file.read()
+        if not isinstance(signals, dict):
+            raise ValueError(
+                "Balance JSON must contain a 'signals' object."
+            )
 
-            temp_file.write(content)
+        sample_count = validate_signal_lengths(
+            signals,
+            balance_features,
+        )
 
-            temp_path = temp_file.name
+        df = pd.DataFrame(
+            signals
+        )
 
-        # ----------------------------------------------------
-        # Process balance recording
-        # ----------------------------------------------------
+        # Convert signal values to numeric.
+        for column in balance_features:
 
-        balance_windows = process_balance_file(
-            temp_path
+            df[column] = pd.to_numeric(
+                df[column],
+                errors="coerce",
+            )
+
+        # Use the SAME windowing logic as the
+        # existing balance preprocessing.
+        balance_windows = create_balance_windows(
+            df
         )
 
         if balance_windows is None:
-
             raise HTTPException(
                 status_code=400,
-                detail="No balance windows were generated."
+                detail="No balance windows were generated.",
             )
 
         if len(balance_windows) == 0:
-
             raise HTTPException(
                 status_code=400,
-                detail="No valid balance windows were generated."
+                detail=(
+                    "No valid balance windows were generated. "
+                    "The recording may need at least 500 samples."
+                ),
             )
 
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # Remove metadata columns such as:
-        # recording_id
-        # window_id
-        #
-        # and keep ONLY model training features.
-        # ----------------------------------------------------
+        rows = []
 
-        balance_features = prepare_features(
-            balance_windows,
-            balance_model,
-            "balance"
+        for window_id, window in enumerate(
+            balance_windows
+        ):
+
+            features = extract_balance_features(
+                window
+            )
+
+            selected_features = (
+                get_feature_columns(
+                    balance_model
+                )
+            )
+
+            if selected_features is None:
+                raise ValueError(
+                    "Could not determine balance model features."
+                )
+
+            if not all(
+                feature in features
+                for feature in selected_features
+            ):
+                raise ValueError(
+                    "Balance preprocessing did not generate "
+                    "all required model features."
+                )
+
+            rows.append(
+                {
+                    feature: features[feature]
+                    for feature in selected_features
+                }
+            )
+
+        balance_features_df = pd.DataFrame(
+            rows
         )
 
-        # ----------------------------------------------------
-        # Get actual model
-        # ----------------------------------------------------
+        balance_features_df = prepare_features(
+            balance_features_df,
+            balance_model,
+            "balance",
+        )
 
         actual_balance_model = get_actual_model(
             balance_model
         )
 
-        # ----------------------------------------------------
-        # Predict
-        # ----------------------------------------------------
-
         predictions = actual_balance_model.predict(
-            balance_features
+            balance_features_df
         )
 
         predictions = np.asarray(
             predictions
         ).astype(int)
 
-        total_windows = len(predictions)
+        total_windows = len(
+            predictions
+        )
 
         pd_windows = int(
-            np.sum(predictions == 1)
+            np.sum(
+                predictions == 1
+            )
         )
 
         pd_ratio = (
@@ -340,135 +494,144 @@ async def predict_balance(
 
         threshold = get_threshold(
             balance_model,
-            default=0.5
+            default=0.5,
         )
 
         if pd_ratio >= threshold:
-
             result = "balance_disorder"
-
         else:
-
             result = "no_balance_disorder"
 
         return {
-
             "modality": "balance",
-
             "prediction": result,
-
             "total_windows": total_windows,
-
             "pd_windows": pd_windows,
-
             "pd_ratio": float(pd_ratio),
-
-            "note":
-                "Screening result only; not a medical diagnosis."
+            "sample_count": sample_count,
+            "note": (
+                "Screening result only; "
+                "not a medical diagnosis."
+            ),
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Balance prediction failed: {str(e)}"
+            detail=f"Balance prediction failed: {str(e)}",
         )
-
-    finally:
-
-        if temp_path:
-
-            try:
-                Path(temp_path).unlink(
-                    missing_ok=True
-                )
-            except Exception:
-                pass
 
 
 # ============================================================
-# GAIT PREDICTION
+# GAIT JSON PREDICTION
 # ============================================================
 
 @app.post("/predict/gait")
 async def predict_gait(
-    file: UploadFile = File(...)
+    payload: dict = Body(...)
 ):
-
-    if not file.filename.lower().endswith(".csv"):
-
-        raise HTTPException(
-            status_code=400,
-            detail="Gait file must be a CSV file."
-        )
-
-    temp_path = None
 
     try:
 
-        # ----------------------------------------------------
-        # Save uploaded CSV
-        # ----------------------------------------------------
-
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".csv"
-        ) as temp_file:
-
-            content = await file.read()
-
-            temp_file.write(content)
-
-            temp_path = temp_file.name
-
-        # ----------------------------------------------------
-        # Read gait data
-        # ----------------------------------------------------
-
-        gait_data = pd.read_csv(
-            temp_path
+        gait_data = get_modality_data(
+            payload,
+            "gait",
         )
 
-        if gait_data.empty:
+        signals = gait_data.get(
+            "signals"
+        )
 
-            raise HTTPException(
-                status_code=400,
-                detail="Gait CSV is empty."
+        if not isinstance(signals, dict):
+            raise ValueError(
+                "Gait JSON must contain a 'signals' object."
             )
 
-        # ----------------------------------------------------
-        # Extract gait features
-        # ----------------------------------------------------
+        required_gait_columns = [
+            "Time",
+            "GeneralEvent",
+            "L_Foot_Contact",
+            "R_Foot_Contact",
+            "L_Foot_Pressure",
+            "R_Foot_Pressure",
+        ]
 
-        gait_features = extract_gait_features_v2(
-            gait_data
+        sample_count = validate_signal_lengths(
+            signals,
+            required_gait_columns,
         )
 
-        # ----------------------------------------------------
-        # Prepare exact training features
-        # ----------------------------------------------------
+        df = pd.DataFrame(
+            signals
+        )
+
+        # Gait preprocessing expects Time values
+        # such as "0.00 sec".
+        if "Time" in df.columns:
+
+            df["Time"] = df["Time"].astype(str)
+
+            df["Time"] = df["Time"].apply(
+                lambda value: (
+                    value
+                    if value.endswith(" sec")
+                    else f"{value} sec"
+                )
+            )
+
+        df["L_Foot_Contact"] = pd.to_numeric(
+            df["L_Foot_Contact"],
+            errors="coerce",
+        )
+
+        df["R_Foot_Contact"] = pd.to_numeric(
+            df["R_Foot_Contact"],
+            errors="coerce",
+        )
+
+        df["L_Foot_Pressure"] = pd.to_numeric(
+            df["L_Foot_Pressure"],
+            errors="coerce",
+        )
+
+        df["R_Foot_Pressure"] = pd.to_numeric(
+            df["R_Foot_Pressure"],
+            errors="coerce",
+        )
+
+        if df.empty:
+            raise HTTPException(
+                status_code=400,
+                detail="Gait data is empty.",
+            )
+
+        gait_features = extract_gait_features_v2(
+            df
+        )
+
+        if not gait_features:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Could not extract gait features. "
+                    "The JSON must contain enough walking/contact "
+                    "events for gait feature extraction."
+                ),
+            )
 
         gait_features = prepare_features(
             gait_features,
             gait_model,
-            "gait"
+            "gait",
         )
-
-        # ----------------------------------------------------
-        # Get actual model
-        # ----------------------------------------------------
 
         actual_gait_model = get_actual_model(
             gait_model
         )
-
-        # ----------------------------------------------------
-        # Predict
-        # ----------------------------------------------------
 
         prediction = actual_gait_model.predict(
             gait_features
@@ -479,137 +642,134 @@ async def predict_gait(
         )
 
         if prediction == 1:
-
             result = "gait_disorder"
-
         else:
-
             result = "no_gait_disorder"
 
         return {
-
             "modality": "gait",
-
             "prediction": result,
-
-            "note":
-                "Screening result only; not a medical diagnosis."
+            "sample_count": sample_count,
+            "note": (
+                "Screening result only; "
+                "not a medical diagnosis."
+            ),
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Gait prediction failed: {str(e)}"
+            detail=f"Gait prediction failed: {str(e)}",
         )
-
-    finally:
-
-        if temp_path:
-
-            try:
-                Path(temp_path).unlink(
-                    missing_ok=True
-                )
-            except Exception:
-                pass
 
 
 # ============================================================
-# FINGER TAPPING PREDICTION
+# FINGER TAPPING JSON PREDICTION
 # ============================================================
 
 @app.post("/predict/finger-tapping")
 async def predict_finger_tapping(
-    file: UploadFile = File(...)
+    payload: dict = Body(...)
 ):
-
-    if not file.filename.lower().endswith(".mat"):
-
-        raise HTTPException(
-            status_code=400,
-            detail="Finger tapping file must be a MAT file."
-        )
-
-    temp_path = None
 
     try:
 
-        # ----------------------------------------------------
-        # Save MAT file
-        # ----------------------------------------------------
+        finger_data = get_modality_data(
+            payload,
+            "finger_tapping",
+        )
 
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".mat"
-        ) as temp_file:
+        # Finger tapping JSON contains the six
+        # gyro arrays directly.
+        sample_count = validate_signal_lengths(
+            finger_data,
+            gyro_features,
+        )
 
-            content = await file.read()
+        data = {}
 
-            temp_file.write(content)
+        for feature in gyro_features:
 
-            temp_path = temp_file.name
+            values = pd.to_numeric(
+                pd.Series(
+                    finger_data[feature]
+                ),
+                errors="coerce",
+            ).to_numpy(
+                dtype=float
+            )
 
-        # ----------------------------------------------------
-        # Process finger tapping recording
-        # ----------------------------------------------------
+            data[feature] = values
 
-        finger_windows = process_finger_file(
-            temp_path
+        # Use the SAME windowing logic as the
+        # existing finger-tapping preprocessing.
+        finger_windows = create_finger_windows(
+            data
         )
 
         if finger_windows is None:
-
             raise HTTPException(
                 status_code=400,
-                detail="No finger tapping windows were generated."
+                detail=(
+                    "No finger-tapping windows were generated."
+                ),
             )
 
         if len(finger_windows) == 0:
-
             raise HTTPException(
                 status_code=400,
-                detail="No valid finger tapping windows were generated."
+                detail=(
+                    "No valid finger-tapping windows were generated. "
+                    "The recording may need at least 500 samples."
+                ),
             )
 
-        # ----------------------------------------------------
-        # Prepare exact training features
-        # ----------------------------------------------------
+        rows = []
 
-        finger_features = prepare_features(
-            finger_windows,
-            finger_model,
-            "finger tapping"
+        for window in finger_windows:
+
+            features = extract_finger_features(
+                window
+            )
+
+            rows.append(
+                features
+            )
+
+        finger_features_df = pd.DataFrame(
+            rows
         )
 
-        # ----------------------------------------------------
-        # Get actual model
-        # ----------------------------------------------------
+        finger_features_df = prepare_features(
+            finger_features_df,
+            finger_model,
+            "finger tapping",
+        )
 
         actual_finger_model = get_actual_model(
             finger_model
         )
 
-        # ----------------------------------------------------
-        # Predict
-        # ----------------------------------------------------
-
         predictions = actual_finger_model.predict(
-            finger_features
+            finger_features_df
         )
 
         predictions = np.asarray(
             predictions
         ).astype(int)
 
-        total_windows = len(predictions)
+        total_windows = len(
+            predictions
+        )
 
         pd_windows = int(
-            np.sum(predictions == 1)
+            np.sum(
+                predictions == 1
+            )
         )
 
         pd_ratio = (
@@ -620,62 +780,43 @@ async def predict_finger_tapping(
 
         threshold = get_threshold(
             finger_model,
-            default=0.5
+            default=0.5,
         )
 
-        # ----------------------------------------------------
-        # Determine final result
-        # ----------------------------------------------------
-
         if pd_ratio >= threshold:
-
             result = "finger_tapping_disorder"
-
         else:
-
             result = "no_finger_tapping_disorder"
 
         return {
-
             "modality": "finger_tapping",
-
             "prediction": result,
-
             "total_windows": total_windows,
-
             "pd_windows": pd_windows,
-
             "pd_ratio": float(pd_ratio),
-
-            "note":
-                "Screening result only; not a medical diagnosis."
+            "sample_count": sample_count,
+            "note": (
+                "Screening result only; "
+                "not a medical diagnosis."
+            ),
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Finger tapping prediction failed: {str(e)}"
+            detail=(
+                "Finger tapping prediction failed: "
+                f"{str(e)}"
+            ),
         )
-
-    finally:
-
-        if temp_path:
-
-            try:
-                Path(temp_path).unlink(
-                    missing_ok=True
-                )
-            except Exception:
-                pass
 
 
 # ============================================================
-# VOICE PREDICTION
+# VOICE WAV PREDICTION
 # ============================================================
 
 @app.post("/predict/voice")
@@ -687,65 +828,41 @@ async def predict_voice(
 
         raise HTTPException(
             status_code=400,
-            detail="Voice file must be a WAV file."
+            detail="Voice file must be a WAV file.",
         )
 
     temp_path = None
 
     try:
 
-        # ----------------------------------------------------
-        # Save WAV temporarily
-        # ----------------------------------------------------
-
         with tempfile.NamedTemporaryFile(
             delete=False,
-            suffix=".wav"
+            suffix=".wav",
         ) as temp_file:
 
             content = await file.read()
 
-            temp_file.write(content)
+            temp_file.write(
+                content
+            )
 
             temp_path = temp_file.name
-
-        # ----------------------------------------------------
-        # Extract the 16 voice features
-        # ----------------------------------------------------
 
         voice_features = extract_voice_features(
             temp_path
         )
 
-        if voice_features is None:
-
-            raise HTTPException(
-                status_code=400,
-                detail="Could not extract voice features."
-            )
-
-        if len(voice_features) == 0:
-
-            raise HTTPException(
-                status_code=400,
-                detail="No voice features were extracted."
-            )
-
-        # ----------------------------------------------------
-        # Prepare exact model features
-        # ----------------------------------------------------
-
         voice_features = prepare_features(
             voice_features,
             voice_model,
-            "voice"
+            "voice",
         )
 
-        # ----------------------------------------------------
-        # Predict
-        # ----------------------------------------------------
+        actual_voice_model = get_actual_model(
+            voice_model
+        )
 
-        prediction = voice_model.predict(
+        prediction = actual_voice_model.predict(
             voice_features
         )
 
@@ -753,73 +870,85 @@ async def predict_voice(
             prediction[0]
         )
 
-        # ----------------------------------------------------
-        # Probability
-        # ----------------------------------------------------
-
-        probabilities = voice_model.predict_proba(
-            voice_features
-        )[0]
-
-        classes = voice_model.classes_
-
-        healthy_probability = 0.0
-        pd_probability = 0.0
-
-        for class_value, probability in zip(
-            classes,
-            probabilities
+        if hasattr(
+            actual_voice_model,
+            "predict_proba",
         ):
 
-            if int(class_value) == 0:
+            probabilities = (
+                actual_voice_model.predict_proba(
+                    voice_features
+                )[0]
+            )
 
-                healthy_probability = float(
-                    probability
+            classes = (
+                actual_voice_model.classes_
+            )
+
+            probability_map = {
+                int(cls): float(prob)
+                for cls, prob in zip(
+                    classes,
+                    probabilities,
                 )
+            }
 
-            elif int(class_value) == 1:
-
-                pd_probability = float(
-                    probability
+            healthy_probability = (
+                probability_map.get(
+                    0,
+                    0.0,
                 )
+            )
 
-        # ----------------------------------------------------
-        # Result
-        # ----------------------------------------------------
-
-        if prediction == 1:
-
-            result = "voice_disorder"
+            pd_probability = (
+                probability_map.get(
+                    1,
+                    0.0,
+                )
+            )
 
         else:
 
-            result = "no_voice_disorder"
+            healthy_probability = (
+                1.0
+                if prediction == 0
+                else 0.0
+            )
+
+            pd_probability = (
+                1.0
+                if prediction == 1
+                else 0.0
+            )
+
+        if prediction == 1:
+            result = "voice_pd"
+        else:
+            result = "voice_healthy"
 
         return {
-
             "modality": "voice",
-
             "prediction": result,
-
-            "pd_probability":
-                float(pd_probability),
-
-            "healthy_probability":
-                float(healthy_probability),
-
-            "note":
-                "Screening result only; not a medical diagnosis."
+            "pd_probability": float(
+                pd_probability
+            ),
+            "healthy_probability": float(
+                healthy_probability
+            ),
+            "note": (
+                "Screening result only; "
+                "not a medical diagnosis."
+            ),
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Voice prediction failed: {str(e)}"
+            detail=f"Voice prediction failed: {str(e)}",
         )
 
     finally:
@@ -830,161 +959,127 @@ async def predict_voice(
                 Path(temp_path).unlink(
                     missing_ok=True
                 )
+
             except Exception:
                 pass
 
 
 # ============================================================
-# OVERALL SCREENING
+# OVERALL PREDICTION
+#
+# JSON:
+# {
+#     "balance": {...},
+#     "gait": {...},
+#     "finger_tapping": {...}
+# }
+#
+# Voice:
+# WAV file
 # ============================================================
 
 @app.post("/predict/overall")
 async def predict_overall(
-
-    balance_file: UploadFile = File(...),
-
-    gait_file: UploadFile = File(...),
-
-    finger_tapping_file: UploadFile = File(...),
-
-    voice_file: UploadFile = File(...)
+    data: str = Form(...),
+    voice_file: UploadFile = File(...),
 ):
-
-    balance_temp_path = None
-    gait_temp_path = None
-    finger_temp_path = None
-    voice_temp_path = None
 
     try:
 
-        # ====================================================
-        # 1. SAVE BALANCE FILE
-        # ====================================================
+        # ----------------------------------------------------
+        # Parse JSON
+        # ----------------------------------------------------
 
-        if not balance_file.filename.lower().endswith(
-            ".csv"
-        ):
+        try:
+            payload = json.loads(
+                data
+            )
+
+        except json.JSONDecodeError as e:
 
             raise HTTPException(
                 status_code=400,
-                detail="Balance file must be a CSV file."
+                detail=(
+                    "Invalid JSON in 'data' field: "
+                    f"{str(e)}"
+                ),
             )
 
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".csv"
-        ) as temp_file:
-
-            temp_file.write(
-                await balance_file.read()
-            )
-
-            balance_temp_path = temp_file.name
-
-        # ====================================================
-        # 2. SAVE GAIT FILE
-        # ====================================================
-
-        if not gait_file.filename.lower().endswith(
-            ".csv"
-        ):
-
-            raise HTTPException(
-                status_code=400,
-                detail="Gait file must be a CSV file."
-            )
-
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".csv"
-        ) as temp_file:
-
-            temp_file.write(
-                await gait_file.read()
-            )
-
-            gait_temp_path = temp_file.name
-
-        # ====================================================
-        # 3. SAVE FINGER TAPPING FILE
-        # ====================================================
-
-        if not finger_tapping_file.filename.lower().endswith(
-            ".mat"
-        ):
-
-            raise HTTPException(
-                status_code=400,
-                detail="Finger tapping file must be a MAT file."
-            )
-
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".mat"
-        ) as temp_file:
-
-            temp_file.write(
-                await finger_tapping_file.read()
-            )
-
-            finger_temp_path = temp_file.name
-
-        # ====================================================
-        # 4. SAVE VOICE FILE
-        # ====================================================
-
-        if not voice_file.filename.lower().endswith(
-            ".wav"
-        ):
-
-            raise HTTPException(
-                status_code=400,
-                detail="Voice file must be a WAV file."
-            )
-
-        with tempfile.NamedTemporaryFile(
-            delete=False,
-            suffix=".wav"
-        ) as temp_file:
-
-            temp_file.write(
-                await voice_file.read()
-            )
-
-            voice_temp_path = temp_file.name
-
-        # ====================================================
+        # ----------------------------------------------------
         # BALANCE
-        # ====================================================
+        # ----------------------------------------------------
 
-        balance_windows = process_balance_file(
-            balance_temp_path
+        balance_data = get_modality_data(
+            payload,
+            "balance",
         )
 
-        if balance_windows is None:
+        balance_signals = balance_data.get(
+            "signals"
+        )
 
+        if not isinstance(
+            balance_signals,
+            dict,
+        ):
             raise ValueError(
-                "No balance windows were generated."
+                "Balance JSON must contain 'signals'."
             )
 
-        if len(balance_windows) == 0:
+        validate_signal_lengths(
+            balance_signals,
+            balance_features,
+        )
 
-            raise ValueError(
-                "No valid balance windows were generated."
+        balance_df = pd.DataFrame(
+            balance_signals
+        )
+
+        for column in balance_features:
+
+            balance_df[column] = pd.to_numeric(
+                balance_df[column],
+                errors="coerce",
             )
 
-        # ----------------------------------------------------
-        # CRITICAL:
-        # recording_id and window_id are metadata.
-        # They are NOT model input features.
-        # prepare_features() removes them by selecting
-        # the exact training feature columns.
-        # ----------------------------------------------------
+        balance_windows = create_balance_windows(
+            balance_df
+        )
 
-        balance_features = prepare_features(
-            balance_windows,
+        if not balance_windows:
+
+            raise HTTPException(
+                status_code=400,
+                detail="No valid balance windows generated.",
+            )
+
+        balance_rows = []
+
+        selected_balance_features = (
+            get_feature_columns(
+                balance_model
+            )
+        )
+
+        for window in balance_windows:
+
+            features = extract_balance_features(
+                window
+            )
+
+            balance_rows.append(
+                {
+                    feature: features[feature]
+                    for feature in selected_balance_features
+                }
+            )
+
+        balance_features_df = prepare_features(
+            pd.DataFrame(
+                balance_rows
+            ),
             balance_model,
-            "balance"
+            "balance",
         )
 
         actual_balance_model = get_actual_model(
@@ -993,7 +1088,7 @@ async def predict_overall(
 
         balance_predictions = (
             actual_balance_model.predict(
-                balance_features
+                balance_features_df
             )
         )
 
@@ -1011,94 +1106,167 @@ async def predict_overall(
             )
         )
 
-        balance_score = (
-            balance_pd_windows /
-            balance_total_windows
+        balance_pd_ratio = (
+            balance_pd_windows
+            / balance_total_windows
+            if balance_total_windows > 0
+            else 0
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # GAIT
-        # ====================================================
+        # ----------------------------------------------------
 
-        gait_data = pd.read_csv(
-            gait_temp_path
+        gait_data = get_modality_data(
+            payload,
+            "gait",
         )
 
-        if gait_data.empty:
+        gait_signals = gait_data.get(
+            "signals"
+        )
 
+        if not isinstance(
+            gait_signals,
+            dict,
+        ):
             raise ValueError(
-                "Gait CSV is empty."
+                "Gait JSON must contain 'signals'."
+            )
+
+        gait_required_columns = [
+            "Time",
+            "GeneralEvent",
+            "L_Foot_Contact",
+            "R_Foot_Contact",
+            "L_Foot_Pressure",
+            "R_Foot_Pressure",
+        ]
+
+        validate_signal_lengths(
+            gait_signals,
+            gait_required_columns,
+        )
+
+        gait_df = pd.DataFrame(
+            gait_signals
+        )
+
+        gait_df["Time"] = (
+            gait_df["Time"]
+            .astype(str)
+            .apply(
+                lambda value: (
+                    value
+                    if value.endswith(" sec")
+                    else f"{value} sec"
+                )
+            )
+        )
+
+        for column in [
+            "L_Foot_Contact",
+            "R_Foot_Contact",
+            "L_Foot_Pressure",
+            "R_Foot_Pressure",
+        ]:
+
+            gait_df[column] = pd.to_numeric(
+                gait_df[column],
+                errors="coerce",
             )
 
         gait_features = extract_gait_features_v2(
-            gait_data
+            gait_df
         )
+
+        if not gait_features:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Could not generate gait features.",
+            )
 
         gait_features = prepare_features(
             gait_features,
             gait_model,
-            "gait"
+            "gait",
         )
 
         actual_gait_model = get_actual_model(
             gait_model
         )
 
-        gait_prediction = (
+        gait_prediction = prediction_to_int(
             actual_gait_model.predict(
                 gait_features
-            )
+            )[0]
         )
-
-        gait_prediction = prediction_to_int(
-            gait_prediction[0]
-        )
-
-        # Binary score:
-        # 0 = no gait disorder
-        # 1 = gait disorder
 
         gait_score = float(
             gait_prediction
         )
 
-        if gait_prediction == 1:
-
-            gait_result = "gait_disorder"
-
-        else:
-
-            gait_result = "no_gait_disorder"
-
-        # ====================================================
+        # ----------------------------------------------------
         # FINGER TAPPING
-        # ====================================================
+        # ----------------------------------------------------
 
-        finger_windows = process_finger_file(
-            finger_temp_path
+        finger_data = get_modality_data(
+            payload,
+            "finger_tapping",
         )
 
-        if finger_windows is None:
+        validate_signal_lengths(
+            finger_data,
+            gyro_features,
+        )
 
-            raise ValueError(
-                "No finger tapping windows were generated."
+        finger_raw_data = {}
+
+        for feature in gyro_features:
+
+            finger_raw_data[feature] = (
+                pd.to_numeric(
+                    pd.Series(
+                        finger_data[feature]
+                    ),
+                    errors="coerce",
+                ).to_numpy(
+                    dtype=float
+                )
             )
 
-        if len(finger_windows) == 0:
+        finger_windows = create_finger_windows(
+            finger_raw_data
+        )
 
-            raise ValueError(
-                "No valid finger tapping windows were generated."
+        if not finger_windows:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No valid finger-tapping windows generated."
+                ),
             )
 
-        # ----------------------------------------------------
-        # Again, select only the exact model features.
-        # This protects against metadata columns.
-        # ----------------------------------------------------
+        finger_rows = []
 
-        finger_features = prepare_features(
-            finger_windows,
+        for window in finger_windows:
+
+            features = extract_finger_features(
+                window
+            )
+
+            finger_rows.append(
+                features
+            )
+
+        finger_features_df = prepare_features(
+            pd.DataFrame(
+                finger_rows
+            ),
             finger_model,
-            "finger tapping"
+            "finger tapping",
         )
 
         actual_finger_model = get_actual_model(
@@ -1107,7 +1275,7 @@ async def predict_overall(
 
         finger_predictions = (
             actual_finger_model.predict(
-                finger_features
+                finger_features_df
             )
         )
 
@@ -1125,238 +1293,241 @@ async def predict_overall(
             )
         )
 
-        finger_score = (
-            finger_pd_windows /
-            finger_total_windows
+        finger_pd_ratio = (
+            finger_pd_windows
+            / finger_total_windows
+            if finger_total_windows > 0
+            else 0
         )
 
-        # ====================================================
+        # ----------------------------------------------------
         # VOICE
-        # ====================================================
+        # ----------------------------------------------------
 
-        voice_features = extract_voice_features(
-            voice_temp_path
-        )
-
-        if voice_features is None:
-
-            raise ValueError(
-                "Could not extract voice features."
-            )
-
-        if len(voice_features) == 0:
-
-            raise ValueError(
-                "No voice features were extracted."
-            )
-
-        voice_features = prepare_features(
-            voice_features,
-            voice_model,
-            "voice"
-        )
-
-        voice_prediction = voice_model.predict(
-            voice_features
-        )
-
-        voice_prediction = prediction_to_int(
-            voice_prediction[0]
-        )
-
-        voice_probabilities = (
-            voice_model.predict_proba(
-                voice_features
-            )[0]
-        )
-
-        voice_classes = voice_model.classes_
-
-        voice_healthy_probability = 0.0
-        voice_pd_probability = 0.0
-
-        for class_value, probability in zip(
-            voice_classes,
-            voice_probabilities
+        if not voice_file.filename.lower().endswith(
+            ".wav"
         ):
 
-            if int(class_value) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Voice file must be a WAV file.",
+            )
 
-                voice_healthy_probability = float(
-                    probability
+        voice_temp_path = None
+
+        try:
+
+            with tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=".wav",
+            ) as temp_file:
+
+                voice_content = await voice_file.read()
+
+                temp_file.write(
+                    voice_content
                 )
 
-            elif int(class_value) == 1:
+                voice_temp_path = temp_file.name
 
-                voice_pd_probability = float(
-                    probability
+            voice_features = extract_voice_features(
+                voice_temp_path
+            )
+
+            voice_features = prepare_features(
+                voice_features,
+                voice_model,
+                "voice",
+            )
+
+            actual_voice_model = get_actual_model(
+                voice_model
+            )
+
+            voice_prediction = prediction_to_int(
+                actual_voice_model.predict(
+                    voice_features
+                )[0]
+            )
+
+            if hasattr(
+                actual_voice_model,
+                "predict_proba",
+            ):
+
+                voice_probabilities = (
+                    actual_voice_model.predict_proba(
+                        voice_features
+                    )[0]
                 )
 
-        # Voice score is probability of class 1
-        voice_score = voice_pd_probability
+                voice_classes = (
+                    actual_voice_model.classes_
+                )
 
-        if voice_prediction == 1:
+                voice_probability_map = {
+                    int(cls): float(prob)
+                    for cls, prob in zip(
+                        voice_classes,
+                        voice_probabilities,
+                    )
+                }
 
-            voice_result = "voice_disorder"
+                voice_healthy_probability = (
+                    voice_probability_map.get(
+                        0,
+                        0.0,
+                    )
+                )
 
-        else:
+                voice_pd_probability = (
+                    voice_probability_map.get(
+                        1,
+                        0.0,
+                    )
+                )
 
-            voice_result = "no_voice_disorder"
+            else:
 
-        # ====================================================
+                voice_healthy_probability = (
+                    1.0
+                    if voice_prediction == 0
+                    else 0.0
+                )
+
+                voice_pd_probability = (
+                    1.0
+                    if voice_prediction == 1
+                    else 0.0
+                )
+
+        finally:
+
+            if voice_temp_path:
+
+                try:
+                    Path(
+                        voice_temp_path
+                    ).unlink(
+                        missing_ok=True
+                    )
+
+                except Exception:
+                    pass
+
+        # ----------------------------------------------------
         # OVERALL SCORE
-        # ====================================================
-
-        # Equal weight for all four modalities.
+        # ----------------------------------------------------
         #
-        # Balance  -> PD window ratio
-        # Gait     -> 0 or 1
-        # Finger   -> PD window ratio
-        # Voice    -> PD probability
+        # Experimental equal-weight score:
         #
-        # This is an experimental screening score.
-        # It is NOT a medically validated probability.
+        # Balance      -> pd_ratio
+        # Gait         -> 0 or 1
+        # Finger       -> pd_ratio
+        # Voice        -> pd_probability
+        #
+        # ----------------------------------------------------
 
         overall_score = (
-            balance_score
+            balance_pd_ratio
             + gait_score
-            + finger_score
-            + voice_score
+            + finger_pd_ratio
+            + voice_pd_probability
         ) / 4.0
 
-        healthy_score = 1.0 - overall_score
-
-        # ----------------------------------------------------
-        # Overall decision
-        # ----------------------------------------------------
+        healthy_score = (
+            1.0 - overall_score
+        )
 
         if overall_score >= 0.5:
 
-            overall_result = "screening_positive"
+            overall_result = (
+                "screening_positive"
+            )
 
         else:
 
-            overall_result = "screening_negative"
-
-        # ====================================================
-        # RETURN RESULT
-        # ====================================================
+            overall_result = (
+                "screening_negative"
+            )
 
         return {
+            "overall_result": overall_result,
 
-            "overall_result":
-                overall_result,
+            "pd_score": float(
+                overall_score
+            ),
 
-            "pd_score":
-                float(overall_score),
-
-            "healthy_score":
-                float(healthy_score),
+            "healthy_score": float(
+                healthy_score
+            ),
 
             "modalities": {
 
                 "balance": {
-
-                    "prediction":
-                        (
-                            "balance_disorder"
-                            if balance_score >= 0.5
-                            else "no_balance_disorder"
-                        ),
-
-                    "total_windows":
-                        balance_total_windows,
-
-                    "pd_windows":
-                        balance_pd_windows,
-
-                    "pd_ratio":
-                        float(balance_score)
+                    "prediction": (
+                        "balance_disorder"
+                        if balance_pd_ratio >= 0.5
+                        else "no_balance_disorder"
+                    ),
+                    "pd_ratio": float(
+                        balance_pd_ratio
+                    ),
                 },
 
                 "gait": {
-
-                    "prediction":
-                        gait_result,
-
-                    "score":
-                        float(gait_score)
+                    "prediction": (
+                        "gait_disorder"
+                        if gait_prediction == 1
+                        else "no_gait_disorder"
+                    ),
+                    "score": float(
+                        gait_score
+                    ),
                 },
 
                 "finger_tapping": {
-
-                    "prediction":
-                        (
-                            "finger_tapping_disorder"
-                            if finger_score >= 0.5
-                            else "no_finger_tapping_disorder"
-                        ),
-
-                    "total_windows":
-                        finger_total_windows,
-
-                    "pd_windows":
-                        finger_pd_windows,
-
-                    "pd_ratio":
-                        float(finger_score)
+                    "prediction": (
+                        "finger_tapping_disorder"
+                        if finger_pd_ratio >= 0.5
+                        else "no_finger_tapping_disorder"
+                    ),
+                    "pd_ratio": float(
+                        finger_pd_ratio
+                    ),
                 },
 
                 "voice": {
-
-                    "prediction":
-                        voice_result,
-
-                    "pd_probability":
-                        float(
-                            voice_pd_probability
-                        ),
-
-                    "healthy_probability":
-                        float(
-                            voice_healthy_probability
-                        )
-                }
+                    "prediction": (
+                        "voice_pd"
+                        if voice_prediction == 1
+                        else "voice_healthy"
+                    ),
+                    "pd_probability": float(
+                        voice_pd_probability
+                    ),
+                    "healthy_probability": float(
+                        voice_healthy_probability
+                    ),
+                },
             },
 
-            "note":
+            "note": (
                 "Overall screening score only; "
                 "not a medically validated probability "
                 "or medical diagnosis."
+            ),
         }
 
     except HTTPException:
-
         raise
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Overall prediction failed: {str(e)}"
+            detail=(
+                "Overall prediction failed: "
+                f"{str(e)}"
+            ),
         )
-
-    finally:
-
-        # ----------------------------------------------------
-        # Delete temporary files
-        # ----------------------------------------------------
-
-        for temp_path in [
-            balance_temp_path,
-            gait_temp_path,
-            finger_temp_path,
-            voice_temp_path
-        ]:
-
-            if temp_path:
-
-                try:
-
-                    Path(temp_path).unlink(
-                        missing_ok=True
-                    )
-
-                except Exception:
-
-                    pass
