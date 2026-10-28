@@ -1,0 +1,91 @@
+{
+    "model": "LogisticRegression",
+    "feature_names": [
+        "mdvp_fo_hz_",
+        "mdvp_fhi_hz_",
+        "mdvp_flo_hz_",
+        "mdvp_jitter___",
+        "mdvp_jitter_abs_",
+        "mdvp_rap",
+        "mdvp_ppq",
+        "jitter_ddp",
+        "mdvp_shimmer",
+        "mdvp_shimmer_db_",
+        "shimmer_apq3",
+        "shimmer_apq5",
+        "mdvp_apq",
+        "shimmer_dda",
+        "nhr",
+        "hnr"
+    ],
+    "label_mapping": {
+        "0": "Healthy",
+        "1": "Parkinson's"
+    },
+    "dataset_size": 81,
+    "train_size": 64,
+    "test_size": 17,
+    "class_distribution": {
+        "healthy": 41,
+        "parkinsons": 40
+    },
+    "best_parameters": {
+        "classifier__C": 100.0
+    },
+    "cv_balanced_accuracy": 0.6261904761904762,
+    "test_accuracy": 0.7647058823529411,
+    "test_balanced_accuracy": 0.75,
+    "test_roc_auc": 0.7777777777777778,
+    "test_specificity": 1.0,
+    "test_sensitivity": 0.5,
+    "confusion_matrix": {
+        "labels": [
+            "Healthy",
+            "Parkinson's"
+        ],
+        "matrix": [
+            [
+                9,
+                0
+            ],
+            [
+                4,
+                4
+            ]
+        ],
+        "true_negative": 9,
+        "false_positive": 0,
+        "false_negative": 4,
+        "true_positive": 4
+    },
+    "classification_report": {
+        "Healthy": {
+            "precision": 0.6923076923076923,
+            "recall": 1.0,
+            "f1-score": 0.8181818181818182,
+            "support": 9.0
+        },
+        "Parkinson's": {
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1-score": 0.6666666666666666,
+            "support": 8.0
+        },
+        "accuracy": 0.7647058823529411,
+        "macro avg": {
+            "precision": 0.8461538461538461,
+            "recall": 0.75,
+            "f1-score": 0.7424242424242424,
+            "support": 17.0
+        },
+        "weighted avg": {
+            "precision": 0.83710407239819,
+            "recall": 0.7647058823529411,
+            "f1-score": 0.7468805704099822,
+            "support": 17.0
+        }
+    },
+    "random_state": 42,
+    "test_size_fraction": 0.2,
+    "warning": "Experimental voice-screening baseline; not clinically validated."
+}

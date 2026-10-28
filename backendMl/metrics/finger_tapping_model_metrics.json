@@ -1,0 +1,176 @@
+{
+    "model_name": "Finger Tapping Random Forest",
+    "model_type": "RandomForestClassifier",
+    "dataset": "fingerTappingData",
+    "evaluation_unit": "recording",
+    "split_strategy": "stratified person-level train/test split",
+    "cross_validation_strategy": "StratifiedGroupKFold",
+    "random_state": 42,
+    "test_size_fraction": 0.2,
+    "n_estimators": 200,
+    "recording_threshold": 0.5,
+    "feature_columns": [
+        "gyroThumbX_mean",
+        "gyroThumbX_std",
+        "gyroThumbX_min",
+        "gyroThumbX_max",
+        "gyroThumbX_rms",
+        "gyroThumbX_mean_abs_change",
+        "gyroThumbX_max_abs_change",
+        "gyroThumbX_zero_crossing_rate",
+        "gyroThumbY_mean",
+        "gyroThumbY_std",
+        "gyroThumbY_min",
+        "gyroThumbY_max",
+        "gyroThumbY_rms",
+        "gyroThumbY_mean_abs_change",
+        "gyroThumbY_max_abs_change",
+        "gyroThumbY_zero_crossing_rate",
+        "gyroThumbZ_mean",
+        "gyroThumbZ_std",
+        "gyroThumbZ_min",
+        "gyroThumbZ_max",
+        "gyroThumbZ_rms",
+        "gyroThumbZ_mean_abs_change",
+        "gyroThumbZ_max_abs_change",
+        "gyroThumbZ_zero_crossing_rate",
+        "gyroIndexX_mean",
+        "gyroIndexX_std",
+        "gyroIndexX_min",
+        "gyroIndexX_max",
+        "gyroIndexX_rms",
+        "gyroIndexX_mean_abs_change",
+        "gyroIndexX_max_abs_change",
+        "gyroIndexX_zero_crossing_rate",
+        "gyroIndexY_mean",
+        "gyroIndexY_std",
+        "gyroIndexY_min",
+        "gyroIndexY_max",
+        "gyroIndexY_rms",
+        "gyroIndexY_mean_abs_change",
+        "gyroIndexY_max_abs_change",
+        "gyroIndexY_zero_crossing_rate",
+        "gyroIndexZ_mean",
+        "gyroIndexZ_std",
+        "gyroIndexZ_min",
+        "gyroIndexZ_max",
+        "gyroIndexZ_rms",
+        "gyroIndexZ_mean_abs_change",
+        "gyroIndexZ_max_abs_change",
+        "gyroIndexZ_zero_crossing_rate"
+    ],
+    "number_of_features": 48,
+    "total_recordings_processed": 120,
+    "total_people": 25,
+    "train_recordings": 94,
+    "test_recordings": 26,
+    "train_people": 20,
+    "test_people": 5,
+    "class_mapping": {
+        "0": "CTRL",
+        "1": "PD"
+    },
+    "cross_validation": {
+        "folds": [
+            {
+                "fold": 1,
+                "recording_accuracy": 0.9333333333333333,
+                "recording_balanced_accuracy": 0.9444444444444444,
+                "recordings": 15,
+                "people": 3
+            },
+            {
+                "fold": 2,
+                "recording_accuracy": 0.55,
+                "recording_balanced_accuracy": 0.75,
+                "recordings": 20,
+                "people": 5
+            },
+            {
+                "fold": 3,
+                "recording_accuracy": 0.6666666666666666,
+                "recording_balanced_accuracy": 0.7692307692307692,
+                "recordings": 18,
+                "people": 4
+            },
+            {
+                "fold": 4,
+                "recording_accuracy": 0.2222222222222222,
+                "recording_balanced_accuracy": 0.2857142857142857,
+                "recordings": 18,
+                "people": 4
+            },
+            {
+                "fold": 5,
+                "recording_accuracy": 1.0,
+                "recording_balanced_accuracy": 1.0,
+                "recordings": 23,
+                "people": 4
+            }
+        ],
+        "mean_accuracy": 0.6744444444444444,
+        "std_accuracy": 0.2803789323023617,
+        "mean_balanced_accuracy": 0.7498778998778999,
+        "std_balanced_accuracy": 0.2514913972318388,
+        "standard_deviation_ddof": 0
+    },
+    "test_metrics": {
+        "accuracy": 0.5,
+        "balanced_accuracy": 0.4305555555555556,
+        "precision_pd": 0.6470588235294118,
+        "recall_pd": 0.6111111111111112,
+        "f1_score_pd": 0.6285714285714286,
+        "sensitivity": 0.6111111111111112,
+        "specificity": 0.25,
+        "roc_auc": 0.2847222222222222
+    },
+    "confusion_matrix": {
+        "labels": [
+            "CTRL",
+            "PD"
+        ],
+        "matrix": [
+            [
+                2,
+                6
+            ],
+            [
+                7,
+                11
+            ]
+        ],
+        "true_negative": 2,
+        "false_positive": 6,
+        "false_negative": 7,
+        "true_positive": 11
+    },
+    "classification_report": {
+        "CTRL": {
+            "precision": 0.2222222222222222,
+            "recall": 0.25,
+            "f1-score": 0.23529411764705882,
+            "support": 8.0
+        },
+        "PD": {
+            "precision": 0.6470588235294118,
+            "recall": 0.6111111111111112,
+            "f1-score": 0.6285714285714286,
+            "support": 18.0
+        },
+        "accuracy": 0.5,
+        "macro avg": {
+            "precision": 0.434640522875817,
+            "recall": 0.4305555555555556,
+            "f1-score": 0.4319327731092437,
+            "support": 26.0
+        },
+        "weighted avg": {
+            "precision": 0.5163398692810458,
+            "recall": 0.5,
+            "f1-score": 0.507563025210084,
+            "support": 26.0
+        }
+    },
+    "evaluated_at_utc": "2026-10-28T11:09:49.903628+00:00",
+    "warning": "Experimental research model. Results depend on the dataset and split; not clinically validated for diagnosis."
+}
