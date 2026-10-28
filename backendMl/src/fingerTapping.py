@@ -2,7 +2,6 @@
 from pathlib import Path
 import sys
 import json
-from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -44,6 +43,8 @@ TEST_SIZE = 0.20
 N_ESTIMATORS = 200
 RECORDING_THRESHOLD = 0.5
 
+
+# Load recording files
 ctrl_files = sorted(ctrl_path.glob("*.mat"))
 pd_files = sorted(pd_path.glob("*.mat"))
 
@@ -52,6 +53,7 @@ if not ctrl_files:
 
 if not pd_files:
     raise FileNotFoundError(f"No PD .mat files found in {pd_path}")
+
 
 rows = []
 recording_info = []
@@ -82,6 +84,7 @@ for file in pd_files:
             "label": 1,
         })
 
+
 if not rows:
     raise ValueError("No valid finger-tapping windows were extracted.")
 
@@ -91,6 +94,8 @@ recording_info = pd.DataFrame(recording_info)
 if recording_info.empty:
     raise ValueError("No valid recording metadata was generated.")
 
+
+# Identify and validate features
 feature_columns = [
     column
     for column in data.columns
@@ -111,6 +116,8 @@ if data[feature_columns].isna().any().any():
 if not np.isfinite(data[feature_columns].to_numpy(dtype=float)).all():
     raise ValueError("Infinite or non-finite feature values were found.")
 
+
+# Validate person-level labels
 person_info = (
     recording_info[["person_id", "label"]]
     .drop_duplicates()
@@ -128,6 +135,8 @@ if person_info["person_id"].nunique() < 5:
         "the requested five-fold grouped cross-validation."
     )
 
+
+# Split by person to avoid data leakage
 train_persons, test_persons = train_test_split(
     person_info["person_id"].values,
     test_size=TEST_SIZE,
@@ -169,6 +178,8 @@ test_data["person_id"] = test_data["recording_id"].map(
 if train_data.empty or test_data.empty:
     raise ValueError("Training or test data is empty.")
 
+
+# Grouped cross-validation
 X = train_data[feature_columns]
 y = train_data["label"]
 groups = train_data["person_id"]
@@ -259,6 +270,7 @@ for fold, (train_idx, val_idx) in enumerate(
         f"Balanced Accuracy = {fold_balanced_accuracy * 100:.2f}%"
     )
 
+
 cv_accuracies = [
     item["recording_accuracy"] for item in fold_scores
 ]
@@ -287,6 +299,8 @@ print(
     f"{np.std(cv_balanced_accuracies) * 100:.2f}%"
 )
 
+
+# Train final model
 print("\n========== FINAL MODEL ==========")
 
 model = RandomForestClassifier(
@@ -300,6 +314,8 @@ model.fit(
     train_data["label"],
 )
 
+
+# Evaluate on unseen people
 test_data["prediction"] = model.predict(
     test_data[feature_columns]
 )
@@ -349,14 +365,6 @@ try:
 except ValueError:
     test_roc_auc = None
 
-report = classification_report(
-    y_true,
-    y_pred,
-    labels=[0, 1],
-    target_names=["CTRL", "PD"],
-    output_dict=True,
-    zero_division=0,
-)
 
 print("\n========== UNSEEN-PERSON TEST RESULTS ==========")
 print(f"Test recordings: {len(recording_test)}")
@@ -389,63 +397,8 @@ print(
     )
 )
 
-metrics = {
-    "model_name": "Finger Tapping Random Forest",
-    "model_type": "RandomForestClassifier",
-    "dataset": "fingerTappingData",
-    "evaluation_unit": "recording",
-    "split_strategy": "stratified person-level train/test split",
-    "cross_validation_strategy": "StratifiedGroupKFold",
-    "random_state": RANDOM_STATE,
-    "test_size_fraction": TEST_SIZE,
-    "n_estimators": N_ESTIMATORS,
-    "recording_threshold": RECORDING_THRESHOLD,
-    "feature_columns": feature_columns,
-    "number_of_features": len(feature_columns),
-    "total_recordings_processed": int(recording_info["recording_id"].nunique()),
-    "total_people": int(person_info["person_id"].nunique()),
-    "train_recordings": int(train_data["recording_id"].nunique()),
-    "test_recordings": int(recording_test["recording_id"].nunique()),
-    "train_people": int(train_data["person_id"].nunique()),
-    "test_people": int(recording_test["person_id"].nunique()),
-    "class_mapping": {
-        "0": "CTRL",
-        "1": "PD",
-    },
-    "cross_validation": {
-        "folds": fold_scores,
-        "mean_accuracy": float(np.mean(cv_accuracies)),
-        "std_accuracy": float(np.std(cv_accuracies)),
-        "mean_balanced_accuracy": float(np.mean(cv_balanced_accuracies)),
-        "std_balanced_accuracy": float(np.std(cv_balanced_accuracies)),
-        "standard_deviation_ddof": 0,
-    },
-    "test_metrics": {
-        "accuracy": float(test_accuracy),
-        "balanced_accuracy": float(test_balanced_accuracy),
-        "precision_pd": float(test_precision),
-        "recall_pd": float(test_recall),
-        "f1_score_pd": float(test_f1),
-        "sensitivity": sensitivity,
-        "specificity": specificity,
-        "roc_auc": test_roc_auc,
-    },
-    "confusion_matrix": {
-        "labels": ["CTRL", "PD"],
-        "matrix": cm.tolist(),
-        "true_negative": int(tn),
-        "false_positive": int(fp),
-        "false_negative": int(fn),
-        "true_positive": int(tp),
-    },
-    "classification_report": report,
-    "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
-    "warning": (
-        "Experimental research model. Results depend on the dataset and split; "
-        "not clinically validated for diagnosis."
-    ),
-}
 
+# Save model and only the four requested metrics
 model_dir.mkdir(parents=True, exist_ok=True)
 metrics_dir.mkdir(parents=True, exist_ok=True)
 
@@ -458,6 +411,13 @@ model_bundle = {
 }
 
 joblib.dump(model_bundle, model_path)
+
+metrics = {
+    "accuracy": float(test_accuracy),
+    "precision": float(test_precision),
+    "recall": float(test_recall),
+    "f1_score": float(test_f1),
+}
 
 with open(metrics_path, "w", encoding="utf-8") as f:
     json.dump(metrics, f, indent=4)

@@ -1,4 +1,6 @@
+
 from pathlib import Path
+import json
 
 import joblib
 import pandas as pd
@@ -7,43 +9,28 @@ from sklearn.model_selection import (
     StratifiedKFold,
     cross_validate
 )
-
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
-import json
-from datetime import datetime
-from sklearn.metrics import roc_auc_score
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-DATA_PATH = (
-    BASE_DIR /
-    "dataset" /
-    "gait_v2.csv"
-)
+DATA_PATH = BASE_DIR / "dataset" / "gait_v2.csv"
 
-MODEL_PATH = (
-    BASE_DIR /
-    "models" /
-    "gait_model.joblib"
-)
+MODEL_PATH = BASE_DIR / "models" / "gait_model.joblib"
+
+METRICS_DIR = BASE_DIR / "metrics"
+METRICS_PATH = METRICS_DIR / "gait_model_metrics.json"
 
 
 df = pd.read_csv(DATA_PATH)
 
-X = df.drop(
-    columns=["recording_id", "label"]
-)
-
+X = df.drop(columns=["recording_id", "label"])
 y = df["label"]
 
 
 model = Pipeline([
-    (
-        "scaler",
-        MinMaxScaler()
-    ),
+    ("scaler", MinMaxScaler()),
     (
         "lr",
         LogisticRegression(
@@ -82,38 +69,21 @@ results = cross_validate(
 )
 
 
+accuracy = results["test_accuracy"].mean()
+precision = results["test_precision"].mean()
+recall = results["test_recall"].mean()
+f1 = results["test_f1"].mean()
+
+
 print("Gait Model Performance")
 print("----------------------")
-
-print(
-    f"Accuracy  : "
-    f"{results['test_accuracy'].mean() * 100:.2f}% "
-    f"+/- "
-    f"{results['test_accuracy'].std() * 100:.2f}%"
-)
-
-print(
-    f"Precision : "
-    f"{results['test_precision'].mean() * 100:.2f}% "
-    f"+/- "
-    f"{results['test_precision'].std() * 100:.2f}%"
-)
-
-print(
-    f"Recall    : "
-    f"{results['test_recall'].mean() * 100:.2f}% "
-    f"+/- "
-    f"{results['test_recall'].std() * 100:.2f}%"
-)
-
-print(
-    f"F1-Score  : "
-    f"{results['test_f1'].mean() * 100:.2f}% "
-    f"+/- "
-    f"{results['test_f1'].std() * 100:.2f}%"
-)
+print(f"Accuracy  : {accuracy * 100:.2f}%")
+print(f"Precision : {precision * 100:.2f}%")
+print(f"Recall    : {recall * 100:.2f}%")
+print(f"F1-Score  : {f1 * 100:.2f}%")
 
 
+# Train the final model on the complete dataset
 model.fit(X, y)
 
 MODEL_PATH.parent.mkdir(
@@ -121,37 +91,27 @@ MODEL_PATH.parent.mkdir(
     exist_ok=True
 )
 
-joblib.dump(
-    model,
-    MODEL_PATH
-)
+joblib.dump(model, MODEL_PATH)
 
 print("\nModel saved to:")
 print(MODEL_PATH)
-# Save cross-validation metrics
-METRICS_DIR = BASE_DIR / "metrics"
-METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# Save only the four evaluation metrics
+METRICS_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
 
 metrics = {
-    "model": "Gait Logistic Regression",
-    "evaluation_method": "5-fold Stratified Cross-Validation",
-    "n_splits": 5,
-    "test_size_fraction_per_fold": 0.2,
-    "accuracy": float(results["test_accuracy"].mean()),
-    "accuracy_std": float(results["test_accuracy"].std()),
-    "precision": float(results["test_precision"].mean()),
-    "precision_std": float(results["test_precision"].std()),
-    "recall": float(results["test_recall"].mean()),
-    "recall_std": float(results["test_recall"].std()),
-    "f1": float(results["test_f1"].mean()),
-    "f1_std": float(results["test_f1"].std()),
-    "evaluation_date": datetime.now().isoformat(timespec="seconds")
+    "accuracy": float(accuracy),
+    "precision": float(precision),
+    "recall": float(recall),
+    "f1_score": float(f1)
 }
 
-metrics_path = METRICS_DIR / "gait_model_metrics.json"
-
-with open(metrics_path, "w", encoding="utf-8") as f:
+with open(METRICS_PATH, "w", encoding="utf-8") as f:
     json.dump(metrics, f, indent=4)
 
 print("\nMetrics saved to:")
-print(metrics_path)
+print(METRICS_PATH)

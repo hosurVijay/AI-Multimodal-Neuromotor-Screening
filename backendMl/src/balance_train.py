@@ -1,7 +1,6 @@
 
 from pathlib import Path
 import json
-from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -51,6 +50,8 @@ print("Metrics:", METRICS_PATH)
 if not DATA_PATH.exists():
     raise FileNotFoundError(f"Dataset not found: {DATA_PATH}")
 
+
+# Load dataset
 df = pd.read_csv(DATA_PATH)
 
 LABEL_COL = "label"
@@ -61,21 +62,28 @@ if LABEL_COL not in df.columns:
 if df[LABEL_COL].dtype == object:
     labels = df[LABEL_COL].astype(str).str.strip().str.upper()
 
-    invalid_labels = ~labels.isin(["PD", "HEALTHY", "CTRL", "CONTROL"])
+    invalid_labels = ~labels.isin(
+        ["PD", "HEALTHY", "CTRL", "CONTROL"]
+    )
 
     if invalid_labels.any():
         raise ValueError(
-            f"Unexpected label values: {labels[invalid_labels].unique().tolist()}"
+            f"Unexpected label values: "
+            f"{labels[invalid_labels].unique().tolist()}"
         )
 
     y = labels.isin(["PD"]).astype(int)
+
 else:
     y = pd.to_numeric(df[LABEL_COL], errors="coerce")
 
     if y.isna().any() or not y.isin([0, 1]).all():
-        raise ValueError("Numeric labels must be 0 (Healthy) or 1 (PD).")
+        raise ValueError(
+            "Numeric labels must be 0 (Healthy) or 1 (PD)."
+        )
 
     y = y.astype(int)
+
 
 feature_columns = (
     df.drop(columns=[LABEL_COL])
@@ -95,7 +103,9 @@ if not np.isfinite(X.to_numpy(dtype=float)).all():
     raise ValueError("Infinite or non-finite feature values found.")
 
 if y.nunique() != 2:
-    raise ValueError("The dataset must contain both Healthy and PD samples.")
+    raise ValueError(
+        "The dataset must contain both Healthy and PD samples."
+    )
 
 print("\nDATASET")
 print("Total samples:", len(X))
@@ -103,6 +113,8 @@ print("Total features:", len(feature_columns))
 print("Healthy:", int((y == 0).sum()))
 print("PD:", int((y == 1).sum()))
 
+
+# Train-test split
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
@@ -115,6 +127,8 @@ print("\nTRAIN / TEST SPLIT")
 print("Train shape:", X_train.shape)
 print("Test shape:", X_test.shape)
 
+
+# Statistical feature selection using training data only
 healthy_train = X_train[y_train == 0]
 pd_train = X_train[y_train == 1]
 
@@ -150,10 +164,13 @@ for feature in X_train.columns:
     except (ValueError, TypeError):
         continue
 
+
 stats_df = pd.DataFrame(results)
 
 if stats_df.empty:
-    raise ValueError("No features could be evaluated statistically.")
+    raise ValueError(
+        "No features could be evaluated statistically."
+    )
 
 reject, p_corrected, _, _ = multipletests(
     stats_df["p_value"],
@@ -175,6 +192,8 @@ significant_features = stats_df[
 print("\nSTATISTICAL FEATURE SELECTION")
 print("FDR-significant features:", len(significant_features))
 
+
+# Remove highly correlated features
 if significant_features:
     corr_matrix = X_train[significant_features].corr(
         method="spearman"
@@ -194,25 +213,36 @@ if significant_features:
 
         if keep:
             selected_features.append(feature)
+
 else:
     selected_features = (
-        stats_df.sort_values("effect_size", ascending=False)
+        stats_df.sort_values(
+            "effect_size",
+            ascending=False,
+        )
         .head(10)["feature"]
         .tolist()
     )
 
+
 if not selected_features:
     raise ValueError("No features were selected.")
 
-print("Selected features after correlation filter:", len(selected_features))
+print(
+    "Selected features after correlation filter:",
+    len(selected_features),
+)
 print("\nSelected features:")
 
 for i, feature in enumerate(selected_features, start=1):
     print(f"{i}. {feature}")
 
+
 X_train_selected = X_train[selected_features].copy()
 X_test_selected = X_test[selected_features].copy()
 
+
+# XGBoost model and hyperparameter tuning
 xgb = XGBClassifier(
     objective="binary:logistic",
     eval_metric="logloss",
@@ -262,6 +292,8 @@ print("Best CV F1:", round(grid.best_score_, 4))
 
 final_model = grid.best_estimator_
 
+
+# Test-set evaluation
 y_pred = final_model.predict(X_test_selected)
 y_probability = final_model.predict_proba(X_test_selected)[:, 1]
 
@@ -281,15 +313,6 @@ tn, fp, fn, tp = cm.ravel()
 
 sensitivity = float(tp / (tp + fn)) if (tp + fn) else None
 specificity = float(tn / (tn + fp)) if (tn + fp) else None
-
-report = classification_report(
-    y_test,
-    y_pred,
-    labels=[0, 1],
-    target_names=["Healthy", "PD"],
-    output_dict=True,
-    zero_division=0,
-)
 
 print("\nFINAL UNSEEN TEST RESULTS")
 print(f"Accuracy:          {accuracy:.4f} ({accuracy * 100:.2f}%)")
@@ -323,6 +346,8 @@ print(
     )
 )
 
+
+# Save model
 model_package = {
     "model": final_model,
     "features": selected_features,
@@ -342,55 +367,16 @@ model_package = {
     },
 }
 
-metrics = {
-    "model_name": "Balance XGBoost",
-    "dataset": DATA_PATH.name,
-    "evaluation_method": "Stratified 80/20 train-test split",
-    "random_state": RANDOM_STATE,
-    "test_size_fraction": TEST_SIZE,
-    "dataset_size": int(len(X)),
-    "train_size": int(len(X_train)),
-    "test_size": int(len(X_test)),
-    "original_feature_count": int(len(feature_columns)),
-    "selected_feature_count": int(len(selected_features)),
-    "selected_features": selected_features,
-    "feature_selection": {
-        "statistical_test": "Mann-Whitney U",
-        "multiple_testing_correction": "Benjamini-Hochberg FDR",
-        "correlation_method": "Spearman",
-        "correlation_threshold": 0.90,
-        "fdr_significant_feature_count": int(len(significant_features)),
-        "feature_statistics": stats_df.to_dict(orient="records"),
-    },
-    "best_parameters": grid.best_params_,
-    "best_cv_f1": float(grid.best_score_),
-    "test_metrics": {
-        "accuracy": float(accuracy),
-        "balanced_accuracy": float(balanced_accuracy),
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "roc_auc": float(roc_auc) if roc_auc is not None else None,
-        "sensitivity": sensitivity,
-        "specificity": specificity,
-    },
-    "confusion_matrix": {
-        "labels": ["Healthy", "PD"],
-        "matrix": cm.tolist(),
-        "true_negative": int(tn),
-        "false_positive": int(fp),
-        "false_negative": int(fn),
-        "true_positive": int(tp),
-    },
-    "classification_report": report,
-    "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
-    "warning": (
-        "Experimental research model. Results depend on the dataset and "
-        "evaluation split and are not clinical validation."
-    ),
-}
-
 joblib.dump(model_package, MODEL_PATH)
+
+
+# Save only the four requested metrics to JSON
+metrics = {
+    "accuracy": float(accuracy),
+    "precision": float(precision),
+    "recall": float(recall),
+    "f1_score": float(f1),
+}
 
 with open(METRICS_PATH, "w", encoding="utf-8") as f:
     json.dump(metrics, f, indent=4, allow_nan=False)
@@ -398,3 +384,4 @@ with open(METRICS_PATH, "w", encoding="utf-8") as f:
 print("\nMODEL SAVED")
 print("Saved / overwritten:", MODEL_PATH)
 print("Metrics saved:", METRICS_PATH)
+print("\nTraining and evaluation completed successfully.")
