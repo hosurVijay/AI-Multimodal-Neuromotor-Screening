@@ -17,6 +17,9 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
     roc_auc_score,
+    precision_score,
+    recall_score,
+    f1_score,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -181,21 +184,18 @@ def train_model():
 
     accuracy = accuracy_score(y_test, y_pred)
     balanced_acc = balanced_accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
 
     cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
-
-    report = classification_report(
-        y_test,
-        y_pred,
-        labels=[0, 1],
-        target_names=["Healthy", "Parkinson's"],
-        output_dict=True,
-        zero_division=0,
-    )
 
     print("\n========== TEST RESULTS ==========")
     print(f"Accuracy:          {accuracy:.4f}")
     print(f"Balanced accuracy: {balanced_acc:.4f}")
+    print(f"Precision:         {precision:.4f}")
+    print(f"Recall:            {recall:.4f}")
+    print(f"F1-score:          {f1:.4f}")
 
     print("\nConfusion matrix:")
     print(cm)
@@ -223,8 +223,16 @@ def train_model():
     specificity = float(tn / (tn + fp)) if (tn + fp) else None
     sensitivity = float(tp / (tp + fn)) if (tp + fn) else None
 
-    print(f"Specificity:       {specificity:.4f}" if specificity is not None else "Specificity: unavailable")
-    print(f"Sensitivity:       {sensitivity:.4f}" if sensitivity is not None else "Sensitivity: unavailable")
+    print(
+        f"Specificity:       {specificity:.4f}"
+        if specificity is not None
+        else "Specificity: unavailable"
+    )
+    print(
+        f"Sensitivity:       {sensitivity:.4f}"
+        if sensitivity is not None
+        else "Sensitivity: unavailable"
+    )
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
@@ -237,41 +245,10 @@ def train_model():
         print("The existing model was not overwritten.")
 
     metrics = {
-        "model": "LogisticRegression",
-        "feature_names": list(FEATURE_NAMES),
-        "label_mapping": {
-            "0": "Healthy",
-            "1": "Parkinson's",
-        },
-        "dataset_size": int(len(df)),
-        "train_size": int(len(X_train)),
-        "test_size": int(len(X_test)),
-        "class_distribution": {
-            "healthy": int((y == 0).sum()),
-            "parkinsons": int((y == 1).sum()),
-        },
-        "best_parameters": search.best_params_,
-        "cv_balanced_accuracy": float(search.best_score_),
-        "test_accuracy": float(accuracy),
-        "test_balanced_accuracy": float(balanced_acc),
-        "test_roc_auc": float(auc) if auc is not None else None,
-        "test_specificity": specificity,
-        "test_sensitivity": sensitivity,
-        "confusion_matrix": {
-            "labels": ["Healthy", "Parkinson's"],
-            "matrix": cm.tolist(),
-            "true_negative": int(tn),
-            "false_positive": int(fp),
-            "false_negative": int(fn),
-            "true_positive": int(tp),
-        },
-        "classification_report": report,
-        "random_state": RANDOM_STATE,
-        "test_size_fraction": TEST_SIZE,
-        "warning": (
-            "Experimental voice-screening baseline; "
-            "not clinically validated."
-        ),
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1_score": float(f1),
     }
 
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
