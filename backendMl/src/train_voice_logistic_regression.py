@@ -19,30 +19,22 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-# --------------------------------------------------
-# 1. PROJECT PATHS
-# --------------------------------------------------
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from preprocessing.voice_feature_extraction import FEATURE_NAMES
 
-DATASET_PATH = (
-    PROJECT_ROOT / "dataset" / "voice_wav_features.csv"
-)
+DATASET_PATH = PROJECT_ROOT / "dataset" / "voice_wav_features.csv"
 
 MODEL_DIR = PROJECT_ROOT / "models"
 MODEL_PATH = MODEL_DIR / "logistic_regression_voice_baseline.joblib"
-METRICS_PATH = MODEL_DIR / "logistic_regression_voice_metrics.json"
+
+METRICS_DIR = PROJECT_ROOT / "metrics"
+METRICS_PATH = METRICS_DIR / "logistic_regression_voice_metrics.json"
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.20
 
-
-# --------------------------------------------------
-# 2. LOAD AND VALIDATE DATA
-# --------------------------------------------------
 
 def load_dataset():
     if not DATASET_PATH.exists():
@@ -65,20 +57,13 @@ def load_dataset():
     ]
 
     if missing_features:
-        raise ValueError(
-            f"Missing feature columns: {missing_features}"
-        )
+        raise ValueError(f"Missing feature columns: {missing_features}")
 
-    # Keep only the expected features and target.
     df = df[FEATURE_NAMES + ["status"]].copy()
 
-    # Convert features to numeric values.
     for feature in FEATURE_NAMES:
-        df[feature] = pd.to_numeric(
-            df[feature], errors="coerce"
-        )
+        df[feature] = pd.to_numeric(df[feature], errors="coerce")
 
-    # Support numeric labels and common text labels.
     if not pd.api.types.is_numeric_dtype(df["status"]):
         label_map = {
             "healthy": 0,
@@ -92,62 +77,37 @@ def load_dataset():
             "1": 1,
         }
 
-        normalized = (
-            df["status"].astype(str).str.strip().str.lower()
-        )
-
+        normalized = df["status"].astype(str).str.strip().str.lower()
         df["status"] = normalized.map(label_map)
 
-    df["status"] = pd.to_numeric(
-        df["status"], errors="coerce"
-    )
+    df["status"] = pd.to_numeric(df["status"], errors="coerce")
 
-    # Do not silently train on invalid labels or missing values.
     if df["status"].isna().any():
-        raise ValueError(
-            "Invalid or missing labels found in 'status'."
-        )
+        raise ValueError("Invalid or missing labels found in 'status'.")
 
     if not df["status"].isin([0, 1]).all():
-        raise ValueError(
-            "Labels must be 0 (Healthy) or 1 (Parkinson's)."
-        )
+        raise ValueError("Labels must be 0 (Healthy) or 1 (Parkinson's).")
 
     if df[FEATURE_NAMES].isna().any().any():
         raise ValueError(
-            "Missing feature values found. "
-            "Inspect the feature extraction output."
+            "Missing feature values found. Inspect the feature extraction output."
         )
 
-    if not np.isfinite(
-        df[FEATURE_NAMES].to_numpy(dtype=float)
-    ).all():
-        raise ValueError(
-            "Infinite or non-finite feature values found."
-        )
+    if not np.isfinite(df[FEATURE_NAMES].to_numpy(dtype=float)).all():
+        raise ValueError("Infinite or non-finite feature values found.")
 
     df["status"] = df["status"].astype(int)
 
     if df["status"].nunique() != 2:
-        raise ValueError(
-            "Training requires samples from both classes."
-        )
+        raise ValueError("Training requires samples from both classes.")
 
     print("\nDataset loaded successfully.")
     print(f"Number of recordings: {len(df)}")
     print("\nClass distribution:")
-    print(
-        df["status"]
-        .map({0: "Healthy", 1: "Parkinson's"})
-        .value_counts()
-    )
+    print(df["status"].map({0: "Healthy", 1: "Parkinson's"}).value_counts())
 
     return df
 
-
-# --------------------------------------------------
-# 3. TRAIN AND EVALUATE
-# --------------------------------------------------
 
 def train_model():
     df = load_dataset()
@@ -155,7 +115,6 @@ def train_model():
     X = df[FEATURE_NAMES]
     y = df["status"]
 
-    # Hold out test data before any model fitting.
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -167,8 +126,6 @@ def train_model():
     print("\nTrain recordings:", len(X_train))
     print("Test recordings:", len(X_test))
 
-    # Scaling is inside the pipeline, so each CV fold
-    # learns its scaler using only that fold's training data.
     pipeline = Pipeline([
         ("scaler", StandardScaler()),
         (
@@ -181,7 +138,6 @@ def train_model():
         ),
     ])
 
-    # Tune regularization using training data only.
     class_counts = y_train.value_counts()
     n_splits = min(5, int(class_counts.min()))
 
@@ -212,7 +168,6 @@ def train_model():
     print("\nTraining Logistic Regression...")
     search.fit(X_train, y_train)
 
-    # GridSearchCV refits the best pipeline on all training data.
     best_model = search.best_estimator_
 
     print("\nBest parameters:", search.best_params_)
@@ -221,26 +176,29 @@ def train_model():
         round(search.best_score_, 4),
     )
 
-    # --------------------------------------------------
-    # 4. EVALUATE ON HELD-OUT TEST SET
-    # --------------------------------------------------
-
     y_pred = best_model.predict(X_test)
     y_prob = best_model.predict_proba(X_test)[:, 1]
 
     accuracy = accuracy_score(y_test, y_pred)
     balanced_acc = balanced_accuracy_score(y_test, y_pred)
 
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+
+    report = classification_report(
+        y_test,
+        y_pred,
+        labels=[0, 1],
+        target_names=["Healthy", "Parkinson's"],
+        output_dict=True,
+        zero_division=0,
+    )
+
     print("\n========== TEST RESULTS ==========")
     print(f"Accuracy:          {accuracy:.4f}")
     print(f"Balanced accuracy: {balanced_acc:.4f}")
 
     print("\nConfusion matrix:")
-    print(
-        confusion_matrix(
-            y_test, y_pred, labels=[0, 1]
-        )
-    )
+    print(cm)
 
     print("\nClassification report:")
     print(
@@ -260,25 +218,27 @@ def train_model():
         auc = None
         print("ROC-AUC unavailable for this test split.")
 
-    # --------------------------------------------------
-    # 5. SAVE MODEL AND METRICS
-    # --------------------------------------------------
+    tn, fp, fn, tp = cm.ravel()
+
+    specificity = float(tn / (tn + fp)) if (tn + fp) else None
+    sensitivity = float(tp / (tp + fn)) if (tp + fn) else None
+
+    print(f"Specificity:       {specificity:.4f}" if specificity is not None else "Specificity: unavailable")
+    print(f"Sensitivity:       {sensitivity:.4f}" if sensitivity is not None else "Sensitivity: unavailable")
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
-    if MODEL_PATH.exists():
-        raise FileExistsError(
-            f"\nModel already exists: {MODEL_PATH}\n"
-            "Rename or move the existing file before saving "
-            "a replacement. No model was overwritten."
-        )
-
-    # Save the entire pipeline, including StandardScaler.
-    joblib.dump(best_model, MODEL_PATH)
+    if not MODEL_PATH.exists():
+        joblib.dump(best_model, MODEL_PATH)
+        print(f"\nNew model saved: {MODEL_PATH}")
+    else:
+        print(f"\nExisting model preserved: {MODEL_PATH}")
+        print("The existing model was not overwritten.")
 
     metrics = {
         "model": "LogisticRegression",
-        "feature_names": FEATURE_NAMES,
+        "feature_names": list(FEATURE_NAMES),
         "label_mapping": {
             "0": "Healthy",
             "1": "Parkinson's",
@@ -286,13 +246,26 @@ def train_model():
         "dataset_size": int(len(df)),
         "train_size": int(len(X_train)),
         "test_size": int(len(X_test)),
+        "class_distribution": {
+            "healthy": int((y == 0).sum()),
+            "parkinsons": int((y == 1).sum()),
+        },
         "best_parameters": search.best_params_,
         "cv_balanced_accuracy": float(search.best_score_),
         "test_accuracy": float(accuracy),
         "test_balanced_accuracy": float(balanced_acc),
-        "test_roc_auc": (
-            float(auc) if auc is not None else None
-        ),
+        "test_roc_auc": float(auc) if auc is not None else None,
+        "test_specificity": specificity,
+        "test_sensitivity": sensitivity,
+        "confusion_matrix": {
+            "labels": ["Healthy", "Parkinson's"],
+            "matrix": cm.tolist(),
+            "true_negative": int(tn),
+            "false_positive": int(fp),
+            "false_negative": int(fn),
+            "true_positive": int(tp),
+        },
+        "classification_report": report,
         "random_state": RANDOM_STATE,
         "test_size_fraction": TEST_SIZE,
         "warning": (
@@ -304,15 +277,9 @@ def train_model():
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=4)
 
-    print("\n========== SAVED ==========")
-    print(f"Model:   {MODEL_PATH}")
-    print(f"Metrics: {METRICS_PATH}")
-    print("\nModel training completed successfully.")
+    print(f"\nMetrics saved: {METRICS_PATH}")
+    print("\nEvaluation completed successfully.")
 
-
-# --------------------------------------------------
-# 6. ENTRY POINT
-# --------------------------------------------------
 
 if __name__ == "__main__":
     train_model()

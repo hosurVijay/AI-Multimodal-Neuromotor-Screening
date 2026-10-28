@@ -11,7 +11,9 @@ from sklearn.model_selection import (
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
-
+import json
+from datetime import datetime
+from sklearn.metrics import roc_auc_score
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
@@ -126,3 +128,30 @@ joblib.dump(
 
 print("\nModel saved to:")
 print(MODEL_PATH)
+# Save cross-validation metrics
+METRICS_DIR = BASE_DIR / "metrics"
+METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+metrics = {
+    "model": "Gait Logistic Regression",
+    "evaluation_method": "5-fold Stratified Cross-Validation",
+    "n_splits": 5,
+    "test_size_fraction_per_fold": 0.2,
+    "accuracy": float(results["test_accuracy"].mean()),
+    "accuracy_std": float(results["test_accuracy"].std()),
+    "precision": float(results["test_precision"].mean()),
+    "precision_std": float(results["test_precision"].std()),
+    "recall": float(results["test_recall"].mean()),
+    "recall_std": float(results["test_recall"].std()),
+    "f1": float(results["test_f1"].mean()),
+    "f1_std": float(results["test_f1"].std()),
+    "evaluation_date": datetime.now().isoformat(timespec="seconds")
+}
+
+metrics_path = METRICS_DIR / "gait_model_metrics.json"
+
+with open(metrics_path, "w", encoding="utf-8") as f:
+    json.dump(metrics, f, indent=4)
+
+print("\nMetrics saved to:")
+print(metrics_path)
